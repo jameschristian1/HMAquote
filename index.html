@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HM Air - Fixed Wing Quote Request</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div class="header-container" style="text-align: center; margin-top: 20px;">
+    <img src="LogoCN.jpeg" alt="HM Air Logo" style="max-width: 200px; height: auto;">
+    </div>
+
+    <form id="quoteForm">
+        <h2>Request a Quote</h2>
+
+        <!-- PERSONAL DETAILS -->
+        <label for="firstName">First name</label>
+        <input type="text" id="firstName" name="firstName" required>
+
+        <label for="surname">Surname</label>
+        <input type="text" id="surname" name="surname" required>
+
+        <label for="business">Business name (if applicable)</label>
+        <input type="text" id="business" name="business">
+
+        <label for="postal">Postal Address</label>
+        <input type="text" id="postal" name="postal" required>
+
+        <label for="suburb">Suburb / Town</label>
+        <input type="text" id="suburb" name="suburb" required>
+
+        <label for="state">State / Territory</label>
+        <select id="state" name="state" required>
+            <option value="">Select</option>
+            <option value="NT">NT</option>
+            <option value="NSW">NSW</option>
+            <option value="QLD">QLD</option>
+            <option value="SA">SA</option>
+            <option value="TAS">TAS</option>
+            <option value="VIC">VIC</option>
+            <option value="WA">WA</option>
+            <option value="ACT">ACT</option>
+        </select>
+
+        <label for="postcode">Postcode</label>
+        <input type="tel" id="postcode" name="postcode" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>
+        
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required>
+
+        <label for="phone">Phone</label>
+        <input type="tel" id="phone" name="phone" inputmode="tel" autocomplete="tel-national"
+                pattern="^(0\d{1}\s\d{4}\s\d{4}|04\d{2}\s\d{3}\s\d{3})$"
+                title="Enter a valid 10-digit number starting with 0"
+            required>
+
+        <label for="passengers">Number of passengers</label>
+        <input type="number" id="passengers" name="passengers" min="1" max="14" required>
+
+        <hr>
+
+        <h3>Route</h3>
+        <small style="color:#666;">
+        Enter your route in order (A → B → C → D → Final Destination)
+        </small>
+
+        <!-- Origin -->
+        <div class="route-stop">
+            <span class="stop-label">A (Origin)</span>
+            <select id="origin" required>
+                <option value="">Loading locations...</option>
+            </select>
+        </div>
+
+        <!-- Intermediate stops -->
+        <div id="legsContainer"></div>
+
+        <button type="button" id="addLegBtn" style="background-color:#28a745; width:auto; padding:5px 15px; margin:10px 0;">
+            + Add Stop
+        </button>
+
+        <!-- Final destination -->
+        <div class="route-stop">
+            <span class="stop-label">Final Destination</span>
+            <select id="destination" required>
+                <option value="">Loading locations...</option>
+            </select>
+        </div>
+
+        <hr>
+
+        <div class="row">
+            <label for="depDate">Departure Date</label>
+            <input type="date" id="depDate" required>
+
+            <label for="depTime">Preferred Departure Time</label>
+            <input type="time" id="depTime" value="09:00" step="60" required>
+
+            <small style="color:#666; display:block; margin-top:5px;">
+                Use 24-hour format (e.g. 14:30 for 2:30 PM)
+            </small>
+        </div>
+
+        <div id="routeMap" style="height: 300px; margin: 20px 0;"></div>
+
+        <button type="submit" id="submitBtn">Submit Quote Request</button>
+
+        <!-- Hidden fields -->
+        <input type="hidden" name="address" id="address">
+
+    </form>
+    
+    <div class="form-footer" style="text-align: center; margin-top: 30px; padding: 20px; color: #555; border-top: 1px solid #eee;">
+    <p>For more complicated booking requests, please contact us at 
+       <a href="mailto:quotes@hmair.com.au">quotes@hmair.com.au</a> 
+       or call <strong>08 8975 0777</strong>.
+    </p>
+    </div>
+
+    <div id="confirmModal" class="modal">
+    <div class="modal-content">
+        <h3>Review Your Quote Request</h3>
+        <hr>
+        <div id="summaryArea">
+            </div>
+        <hr>
+        <div class="modal-footer">
+            <button type="button" id="editBtn" class="secondary-btn">Edit Details</button>
+            <button type="button" id="finalSubmitBtn" class="primary-btn">Confirm & Send</button>
+        </div>
+    </div>
+</div>
+   <script src="script.js"></script>
+</body>
+</html>
