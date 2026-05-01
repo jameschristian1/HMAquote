@@ -111,3 +111,32 @@ button {
 .route-pin.origin { background: #2ecc71; }
 .route-pin.stop { background: #004a99; }
 .route-pin.destination { background: #e74c3c; }
+
+/* --- REACTIVE WAIT TIME LOGIC --- */
+
+/* Hide Wait at B by default */
+#waitAtBContainer {
+    display: none !important;
+}
+
+/* Show Wait at B only if C exists (if legsContainer has children) */
+#legsContainer:not(:empty) + .route-stop #waitAtBContainer, /* If B is AFTER container */
+.route-stop:has(~ #legsContainer .leg-row) #waitAtBContainer { /* If B is BEFORE container */
+    display: block !important;
+}
+
+/* Specific fix for your current HTML structure where B is above the container */
+#legsContainer:has(.leg-row) ~ .route-stop #waitAtBContainer,
+body:has(#legsContainer .leg-row) #waitAtBContainer {
+    display: block !important;
+}
+
+/* Hide wait time for the VERY last leg in the chain */
+#legsContainer .leg-row:last-child .wait-time-group {
+    display: none !important;
+}
+
+/* Ensure intermediate wait times ARE shown for middle legs */
+#legsContainer .leg-row:not(:last-child) .wait-time-group {
+    display: block !important;
+}

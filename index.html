@@ -78,33 +78,43 @@
             </select>
         </div>
 
-        <!-- Intermediate stops -->
+        <!-- Destination -->
+        <div class="route-stop" style="margin-top: 15px;">
+            <div style="display: flex; align-items: flex-end; gap: 10px;">
+                <div style="flex: 2;">
+                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">B (Destination)</label>
+                    <select id="destination" required style="width: 100%; padding: 8px;">
+                        <option value="">Loading locations...</option>
+                    </select>
+                </div>
+                
+                <div id="waitAtBContainer" class="wait-time-group" style="flex: 1; min-width: 130px; display: none; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff;">
+                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Wait at B:</label>
+                    <select name="waitTimeB" id="waitTimeB" style="width: 100%; padding: 4px; margin-top: 4px;"></select>
+                </div>
+
+                <div style="width: 40px;"></div>
+            </div>
+        </div>
+
         <div id="legsContainer"></div>
 
         <button type="button" id="addLegBtn" style="background-color:#28a745; width:auto; padding:5px 15px; margin:10px 0;">
             + Add Stop
         </button>
 
-        <!-- Final destination -->
-        <div class="route-stop">
-            <span class="stop-label">Final Destination</span>
-            <select id="destination" required>
-                <option value="">Loading locations...</option>
-            </select>
-        </div>
-
         <hr>
 
-        <div class="row">
-            <label for="depDate">Departure Date</label>
-            <input type="date" id="depDate" required>
-
-            <label for="depTime">Preferred Departure Time</label>
-            <input type="time" id="depTime" value="09:00" step="60" required>
-
-            <small style="color:#666; display:block; margin-top:5px;">
-                Use 24-hour format (e.g. 14:30 for 2:30 PM)
-            </small>
+        <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+            <div style="flex: 1;">
+                <label for="departureDate">Departure Date:</label>
+                <input type="date" id="departureDate" name="departureDate" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            </div>
+            <div style="flex: 1;">
+                <label for="departureTime">Preferred Time:</label>
+                <select id="departureTime" name="departureTime" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    </select>
+            </div>
         </div>
 
         <div id="routeMap" style="height: 300px; margin: 20px 0;"></div>

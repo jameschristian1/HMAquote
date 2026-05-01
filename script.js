@@ -1,6 +1,6 @@
 // Replace this with your "Published as CSV" link from Google Sheets
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsQOS8r4GbYTOG_PBqeTNjTUBsvyURtrN2SqCw4lnoeeW7PvLdvcUqqIH0QOuDY8XBnLEjBiBJQI78/pub?output=csv';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjcAtRe86mN2kQ4LcUqINLrPrkdl9fKuxHimfQsxZ8E6VqGHj02yW-sjzkVdJ4sXrdSQ/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby1-eyKV7a1s4iVFSpKUyfMLv8HoHhNBJzxHOM7_APBALyixa3mvzMJECJkzMklCw_t6w/exec';
 
 let airstripData = [];
 
@@ -38,39 +38,44 @@ function updateRouteMap() {
 
     const points = [];
 
+    // 1. Get Origin (A)
     const origin = getSelectedLatLng('origin');
     if (origin) points.push(origin);
 
-    const stops = Array.from(document.querySelectorAll('select[name="intermediateStop[]"]'))
+    // 2. Get Destination (B)
+    const destination = getSelectedLatLng('destination');
+    if (destination) points.push(destination);
+
+    // 3. Get all the dynamically added stops (C, D, E...)
+    const extraStops = Array.from(document.querySelectorAll('select[name="intermediateStop[]"]'))
         .map(s => {
             const opt = s.selectedOptions[0];
-            if (!opt) return null;
+            if (!opt || !opt.dataset.lat) return null;
             const lat = parseFloat(opt.dataset.lat);
             const lon = parseFloat(opt.dataset.lon);
             return isNaN(lat) ? null : [lat, lon];
         })
         .filter(Boolean);
 
-    points.push(...stops);
+    // Add them to the end of the chain
+    points.push(...extraStops);
 
-    const destination = getSelectedLatLng('destination');
-    if (destination) points.push(destination);
-
+    // --- RENDER LOGIC ---
     markers.forEach(m => map.removeLayer(m));
     markers = [];
-
     if (routeLine) map.removeLayer(routeLine);
-
     if (points.length === 0) return;
 
+    // Use labels A, B, C, D, E, F, G in order
     const labels = ["A", "B", "C", "D", "E", "F", "G"];
 
     points.forEach((p, i) => {
         const label = labels[i] || "?";
-
-        let type = "stop";
-        if (i === 0) type = "origin";
-        else if (i === points.length - 1) type = "destination";
+        
+        // Define pin color/style logic
+        let type = "stop"; 
+        if (i === 0) type = "origin"; // A is Origin
+        if (i === points.length - 1) type = "destination"; // The last point in the chain is the Destination
 
         const marker = L.marker(p, {
             icon: L.divIcon({
@@ -80,7 +85,6 @@ function updateRouteMap() {
                 iconAnchor: [13, 13]
             })
         }).addTo(map);
-
         markers.push(marker);
     });
 
@@ -90,12 +94,7 @@ function updateRouteMap() {
     }).addTo(map);
 
     if (points.length >= 2) {
-        const bounds = routeLine.getBounds();
-
-        map.fitBounds(bounds, {
-            padding: [20, 20],
-            maxZoom: 8   // prevents zooming too far into remote airstrips
-        });
+        map.fitBounds(routeLine.getBounds(), { padding: [20, 20], maxZoom: 8 });
     }
 }
 
@@ -144,41 +143,63 @@ function populateDropdown(selectElement) {
 /* ========================================
    DYNAMIC LEGS LOGIC
    ======================================== */
-const legsContainer = document.getElementById('legsContainer');
-const addLegBtn = document.getElementById('addLegBtn');
-
 if (addLegBtn) {
     addLegBtn.addEventListener('click', () => {
-        const currentLegs = document.querySelectorAll('select[name="intermediateStop[]"]').length;
+        const currentLegs = document.querySelectorAll('.leg-row').length;
+        if (currentLegs >= 5) return;
 
-        if (currentLegs >= 5) {
-            alert("Maximum 5 intermediate stops allowed (6 landings total including origin and destination).");
-            return;
-        }
+        // NEW: Labels logic
+        const labels = ['C', 'D', 'E', 'F', 'G'];
+        const legLabel = labels[currentLegs]; // This is the new stop (C, D, etc.)
+        
+        // If it's the first extra leg (C), previous was B. 
+        // Otherwise, it was the letter before this one in the labels array.
+        const prevStopLabel = (currentLegs === 0) ? 'B' : labels[currentLegs - 1];
+
+        // 1. Show the static "Wait at B" box if we just added C
+        const waitAtB = document.getElementById('waitAtBContainer');
+        if (waitAtB) waitAtB.style.display = 'block';
 
         const legId = Date.now();
         const legDiv = document.createElement('div');
         legDiv.className = 'leg-row';
         legDiv.id = `leg-${legId}`;
+        
         legDiv.innerHTML = `
-            <div style="display: flex; align-items: flex-end; gap: 10px;">
-                <div style="flex-grow: 1;">
-                    <label>Intermediate Stop:</label>
-                    <select name="intermediateStop[]" required></select>
+            <div style="display: flex; align-items: flex-end; gap: 10px; margin-bottom: 15px;">
+                <div style="flex: 2;">
+                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">${legLabel} (Destination):</label>
+                    <select name="intermediateStop[]" required style="width: 100%; padding: 8px;"></select>
                 </div>
-                <button type="button" class="remove-btn" onclick="removeLeg('leg-${legId}')" 
-                        style="background: #dc3545; width: 40px; margin-bottom: 10px;">X</button>
+                
+                <div class="wait-time-group" style="flex: 1; min-width: 130px; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff;">
+                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Wait at ${legLabel}:</label>
+                    <select name="waitTime[]" style="width: 100%; padding: 4px; margin-top: 4px;">
+                        ${generateClockOptions(12, 0, 30)}
+                    </select>
+                </div>
+
+                <button type="button" onclick="removeLeg('leg-${legId}')" 
+                        style="background: #dc3545; color: white; width: 40px; height: 38px; border: none; border-radius: 4px; cursor: pointer; margin-top: 0; padding: 0;">X</button>
             </div>
         `;
-        legDiv.querySelector('select').addEventListener('change', scheduleRouteUpdate);
+        
         legsContainer.appendChild(legDiv);
         populateDropdown(legDiv.querySelector('select'));
+        legDiv.querySelector('select').addEventListener('change', scheduleRouteUpdate);
     });
 }
 
 function removeLeg(id) {
     const element = document.getElementById(id);
     if (element) element.remove();
+    
+    // If no more legs (C, D, etc.), hide Wait at B
+    const currentLegs = document.querySelectorAll('.leg-row').length;
+    if (currentLegs === 0) {
+        const waitAtB = document.getElementById('waitAtBContainer');
+        if (waitAtB) waitAtB.style.display = 'none';
+    }
     scheduleRouteUpdate();
 }
 
@@ -202,6 +223,22 @@ function bindRouteListeners() {
         }
     });
 }
+
+/* ========================================
+   CLOCK GENERATOR (15-minute intervals)
+   ======================================== */
+const generateClockOptions = (maxHours, defaultH = 0, defaultM = 30) => {
+    let options = '';
+    for (let h = 0; h <= maxHours; h++) {
+        for (let m = 0; m < 60; m += 15) { // Changed to 15-minute steps
+            const hh = h.toString().padStart(2, '0');
+            const mm = m.toString().padStart(2, '0');
+            const isSelected = (h === defaultH && m === defaultM) ? 'selected' : '';
+            options += `<option value="${hh}:${mm}" ${isSelected}>${hh}:${mm}</option>`;
+        }
+    }
+    return options;
+};
 
 /* ========================================
    FORMATTING (PHONE & POSTCODE)
@@ -273,8 +310,8 @@ if (quoteForm) {
             phone: document.getElementById('phone')?.value || "",
             origin: document.getElementById('origin')?.value || "",
             destination: document.getElementById('destination')?.value || "",
-            depDate: document.getElementById('depDate')?.value || "",
-            depTime: document.getElementById('depTime')?.value || "",
+            departureDate: document.getElementById('departureDate')?.value || "",
+            departureTime: document.getElementById('departureTime')?.value || "",
             passengers: document.getElementById('passengers')?.value || "",
             intermediateStops: stops
         };
@@ -283,7 +320,7 @@ if (quoteForm) {
             <p><strong>Name:</strong> ${pendingData.firstName} ${pendingData.surname}</p>
             <p><strong>Route:</strong> ${pendingData.origin} → ${pendingData.destination}</p>
             ${stops.length > 0 ? `<p><strong>Stops:</strong> ${stops.join(', ')}</p>` : ''}
-            <p><strong>Departure:</strong> ${pendingData.depDate} at ${pendingData.depTime}</p>
+            <p><strong>Departure:</strong> ${pendingData.departureDate} at ${pendingData.departureTime}</p>
             <p><strong>Passengers:</strong> ${pendingData.passengers}</p>
             <p><strong>Contact:</strong> ${pendingData.email}</p>
         `;
@@ -327,9 +364,22 @@ if (finalSubmitBtn) {
             formData.append("origin", origin);
             formData.append("destination", destination);
 
-            formData.append("depDate", get("depDate"));
-            formData.append("depTime", get("depTime"));
+            formData.append("departureDate", get("departureDate"));
+            formData.append("departureTime", get("departureTime"));
             formData.append("passengers", get("passengers"));
+
+            // 1. Append the static Wait B
+            formData.append("waitTimeB", document.getElementById('waitTimeB')?.value || "");
+
+            // 2. Append the dynamic Wait times (C, D, E, F)
+            const dynamicWaits = Array.from(document.querySelectorAll('select[name="waitTime[]"]'))
+                .map(s => s.value);
+
+            // We map them to the specific headers you created
+            formData.append("waitTimeC", dynamicWaits[0] || "");
+            formData.append("waitTimeD", dynamicWaits[1] || "");
+            formData.append("waitTimeE", dynamicWaits[2] || "");
+            formData.append("waitTimeF", dynamicWaits[3] || "");
 
             // -------------------------
             // CLEAN ROUTE BUILD
@@ -343,8 +393,10 @@ if (finalSubmitBtn) {
             // MAP TO GAS FIELDS
             // (Destination 1–6 = route legs AFTER origin)
             // -------------------------
+            const destLetters = ['B', 'C', 'D', 'E', 'F', 'G'];
             for (let i = 0; i < 6; i++) {
-                formData.append(`Destination ${i + 1}`, route[i + 1] || "");
+                const label = `Destination ${destLetters[i]}`;
+                formData.append(label, route[i + 1] || "");
             }
 
             // -------------------------
@@ -377,6 +429,17 @@ window.onload = () => {
     loadAirstrips();
     bindRouteListeners();
 
-    const dateInput = document.getElementById('depDate');
-    if (dateInput) dateInput.min = new Date().toISOString().split("T")[0];
+    const waitTimeB = document.getElementById('waitTimeB');
+    if (waitTimeB) waitTimeB.innerHTML = generateClockOptions(12, 0, 30);
+
+    const dateInput = document.getElementById('departureDate');
+    if (dateInput) {
+        dateInput.min = new Date().toISOString().split("T")[0];
+    }
+
+    const timeSelect = document.getElementById('departureTime');
+    if (timeSelect) {
+        // 23 hours max, default to 08:00
+        timeSelect.innerHTML = generateClockOptions(23, 8, 0);
+    }
 };
