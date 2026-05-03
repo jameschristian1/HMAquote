@@ -1,6 +1,6 @@
 // Replace this with your "Published as CSV" link from Google Sheets
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsQOS8r4GbYTOG_PBqeTNjTUBsvyURtrN2SqCw4lnoeeW7PvLdvcUqqIH0QOuDY8XBnLEjBiBJQI78/pub?output=csv';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby1-eyKV7a1s4iVFSpKUyfMLv8HoHhNBJzxHOM7_APBALyixa3mvzMJECJkzMklCw_t6w/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKuoAJ1vRExVFym4EWKrkJLpOXwr_g8hCp6fAz_d4R2iFYstct5NFYRBAEf80rNB53UA/exec';
 
 let airstripData = [];
 
@@ -382,20 +382,22 @@ if (finalSubmitBtn) {
             formData.append("waitTimeF", dynamicWaits[3] || "");
 
             // -------------------------
-            // CLEAN ROUTE BUILD
+            // CLEAN ROUTE BUILD (Corrected)
             // -------------------------
+            // We want: [Origin, Destination B, Stop C, Stop D, Stop E, Stop F, Stop G]
             const stops = (pendingData.intermediateStops || [])
                 .filter(v => v && v.trim() !== "");
 
-            const route = [origin, ...stops, destination];
+            // Put 'destination' (B) immediately after origin
+            const route = [origin, destination, ...stops]; 
 
             // -------------------------
             // MAP TO GAS FIELDS
-            // (Destination 1–6 = route legs AFTER origin)
             // -------------------------
             const destLetters = ['B', 'C', 'D', 'E', 'F', 'G'];
             for (let i = 0; i < 6; i++) {
                 const label = `Destination ${destLetters[i]}`;
+                // Now route[1] is ALWAYS B, route[2] is ALWAYS C, etc.
                 formData.append(label, route[i + 1] || "");
             }
 
