@@ -354,52 +354,56 @@ if (finalSubmitBtn) {
             // -------------------------
             const formData = new URLSearchParams();
 
+            // Contact & Personal Details
             formData.append("firstName", get("firstName"));
             formData.append("surname", get("surname"));
             formData.append("business", get("business"));
             formData.append("address", combineAddress());
             formData.append("email", get("email"));
             formData.append("phone", get("phone"));
-
-            formData.append("origin", origin);
-            formData.append("destination", destination);
-
             formData.append("departureDate", get("departureDate"));
             formData.append("departureTime", get("departureTime"));
             formData.append("passengers", get("passengers"));
-
-            // 1. Append the static Wait B
-            formData.append("waitTimeB", document.getElementById('waitTimeB')?.value || "");
-
-            // 2. Append the dynamic Wait times (C, D, E, F)
-            const dynamicWaits = Array.from(document.querySelectorAll('select[name="waitTime[]"]'))
-                .map(s => s.value);
-
-            // We map them to the specific headers you created
-            formData.append("waitTimeC", dynamicWaits[0] || "");
-            formData.append("waitTimeD", dynamicWaits[1] || "");
-            formData.append("waitTimeE", dynamicWaits[2] || "");
-            formData.append("waitTimeF", dynamicWaits[3] || "");
+            formData.append("origin", origin);
 
             // -------------------------
-            // CLEAN ROUTE BUILD (Corrected)
+            // CLEAN ROUTE BUILD
             // -------------------------
-            // We want: [Origin, Destination B, Stop C, Stop D, Stop E, Stop F, Stop G]
-            const stops = (pendingData.intermediateStops || [])
-                .filter(v => v && v.trim() !== "");
-
-            // Put 'destination' (B) immediately after origin
+            const stops = (pendingData.intermediateStops || []).filter(v => v && v.trim() !== "");
             const route = [origin, destination, ...stops]; 
+            const totalDestinations = 1 + stops.length; // B + (any extra stops)
 
             // -------------------------
-            // MAP TO GAS FIELDS
+            // MAP DESTINATIONS (B-G)
             // -------------------------
             const destLetters = ['B', 'C', 'D', 'E', 'F', 'G'];
             for (let i = 0; i < 6; i++) {
                 const label = `Destination ${destLetters[i]}`;
-                // Now route[1] is ALWAYS B, route[2] is ALWAYS C, etc.
                 formData.append(label, route[i + 1] || "");
             }
+
+            // -------------------------
+            // MAP WAIT TIMES (Conditional)
+            // -------------------------
+            // Only send Wait B if C exists
+            if (totalDestinations > 1) {
+                formData.append("waitTimeB", document.getElementById('waitTimeB')?.value || "");
+            } else {
+                formData.append("waitTimeB", "");
+            }
+
+            // Only send Wait C, D, E, F if a destination follows them
+            const dynamicWaitSelects = document.querySelectorAll('select[name="waitTime[]"]');
+            const waitLetters = ['C', 'D', 'E', 'F'];
+
+            waitLetters.forEach((letter, index) => {
+                // index 0 = Wait C. If totalDestinations is 3 (B, C, D), 3 > 2 is true.
+                if (totalDestinations > (index + 2)) {
+                    formData.append(`waitTime${letter}`, dynamicWaitSelects[index]?.value || "");
+                } else {
+                    formData.append(`waitTime${letter}`, "");
+                }
+            });
 
             // -------------------------
             // SEND TO APPS SCRIPT
