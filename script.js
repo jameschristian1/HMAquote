@@ -1,6 +1,6 @@
 // Replace this with your "Published as CSV" link from Google Sheets
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsQOS8r4GbYTOG_PBqeTNjTUBsvyURtrN2SqCw4lnoeeW7PvLdvcUqqIH0QOuDY8XBnLEjBiBJQI78/pub?output=csv';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxH2nqT7c4NUN1K7hLKlZ2JQL-yV00qK24fockPJusyiFpjgL9ic7vhstyz7vXGIYnDXg/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwPRSotIJ8SMCoWAJf44SudowBoMw5Rd0Gbo4wR7O8q5IKu33HxH7Y4MKyeqZgNRHAS4Q/exec';
 
 let airstripData = [];
 
