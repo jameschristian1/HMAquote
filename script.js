@@ -1,6 +1,6 @@
 // Replace this with your "Published as CSV" link from Google Sheets
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsQOS8r4GbYTOG_PBqeTNjTUBsvyURtrN2SqCw4lnoeeW7PvLdvcUqqIH0QOuDY8XBnLEjBiBJQI78/pub?output=csv';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwPRSotIJ8SMCoWAJf44SudowBoMw5Rd0Gbo4wR7O8q5IKu33HxH7Y4MKyeqZgNRHAS4Q/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxChdsB11TPcY3TATTVYFq2Vg7Mi_Qh2NnRuoyqKJgof3Z6Mm5CXUnSmgj5gjOJbzYXww/exec';
 
 let airstripData = [];
 
@@ -38,13 +38,13 @@ function updateRouteMap() {
 
     const points = [];
 
-    // 1. Get Origin (A)
-    const origin = getSelectedLatLng('origin');
-    if (origin) points.push(origin);
+    // 1. Get Location A (A)
+    const locationA = getSelectedLatLng('locationA');
+    if (locationA) points.push(locationA);
 
-    // 2. Get Destination (B)
-    const destination = getSelectedLatLng('destination');
-    if (destination) points.push(destination);
+    // 2. Get Location (B)
+    const locationB = getSelectedLatLng('locationB');
+    if (locationB) points.push(locationB);
 
     // 3. Get all the dynamically added stops (C, D, E...)
     const extraStops = Array.from(document.querySelectorAll('select[name="intermediateStop[]"]'))
@@ -74,8 +74,8 @@ function updateRouteMap() {
         
         // Define pin color/style logic
         let type = "stop"; 
-        if (i === 0) type = "origin"; // A is Origin
-        if (i === points.length - 1) type = "destination"; // The last point in the chain is the Destination
+        if (i === 0) type = "locationA"; // A is locationA
+        if (i === points.length - 1) type = "destination";
 
         const marker = L.marker(p, {
             icon: L.divIcon({
@@ -108,8 +108,8 @@ async function loadAirstrips() {
             return cols;
         }).filter(cols => cols && cols.length >= 6);
 
-        populateDropdown(document.getElementById('origin'));
-        populateDropdown(document.getElementById('destination'));
+        populateDropdown(document.getElementById('locationA'));
+        populateDropdown(document.getElementById('locationB'));
     } catch (error) {
         console.error('Error loading airstrips:', error);
     }
@@ -168,7 +168,7 @@ if (addLegBtn) {
         legDiv.innerHTML = `
             <div style="display: flex; align-items: flex-end; gap: 10px; margin-bottom: 15px;">
                 <div style="flex: 2;">
-                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">${legLabel} (Destination):</label>
+                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">Location ${legLabel}</label>
                     <select name="intermediateStop[]" required style="width: 100%; padding: 8px;"></select>
                 </div>
                 
@@ -211,11 +211,11 @@ function scheduleRouteUpdate() {
 }
 
 function bindRouteListeners() {
-    const origin = document.getElementById('origin');
-    const destination = document.getElementById('destination');
+    const locationA = document.getElementById('locationA');
+    const locationB = document.getElementById('locationB');
 
-    if (origin) origin.addEventListener('change', scheduleRouteUpdate);
-    if (destination) destination.addEventListener('change', scheduleRouteUpdate);
+    if (locationA) locationA.addEventListener('change', scheduleRouteUpdate);
+    if (locationB) locationB.addEventListener('change', scheduleRouteUpdate);
 
     document.addEventListener('change', (e) => {
         if (e.target && e.target.name === 'intermediateStop[]') {
@@ -308,8 +308,8 @@ if (quoteForm) {
             address: combineAddress() || "",
             email: document.getElementById('email')?.value || "",
             phone: document.getElementById('phone')?.value || "",
-            origin: document.getElementById('origin')?.value || "",
-            destination: document.getElementById('destination')?.value || "",
+            locationA: document.getElementById('locationA')?.value || "",
+            locationB: document.getElementById('locationB')?.value || "",
             departureDate: document.getElementById('departureDate')?.value || "",
             departureTime: document.getElementById('departureTime')?.value || "",
             passengers: document.getElementById('passengers')?.value || "",
@@ -318,7 +318,7 @@ if (quoteForm) {
 
         summaryArea.innerHTML = `
             <p><strong>Name:</strong> ${pendingData.firstName} ${pendingData.surname}</p>
-            <p><strong>Route:</strong> ${pendingData.origin} → ${pendingData.destination}</p>
+            <p><strong>Route:</strong> ${pendingData.locationA} → ${pendingData.locationB}</p>
             ${stops.length > 0 ? `<p><strong>Stops:</strong> ${stops.join(', ')}</p>` : ''}
             <p><strong>Departure:</strong> ${pendingData.departureDate} at ${pendingData.departureTime}</p>
             <p><strong>Passengers:</strong> ${pendingData.passengers}</p>
@@ -341,11 +341,11 @@ if (finalSubmitBtn) {
             // -------------------------
             // BASIC VALIDATION
             // -------------------------
-            const origin = get("origin");
-            const destination = get("destination");
+            const locationA = get("locationA");
+            const locationB = get("locationB");
 
-            if (!origin || !destination) {
-                alert("Please select origin and destination");
+            if (!locationA || !locationB) {
+                alert("Please select location A and location B");
                 return;
             }
 
@@ -364,21 +364,21 @@ if (finalSubmitBtn) {
             formData.append("departureDate", get("departureDate"));
             formData.append("departureTime", get("departureTime"));
             formData.append("passengers", get("passengers"));
-            formData.append("origin", origin);
+            formData.append("locationA", locationA);
 
             // -------------------------
             // CLEAN ROUTE BUILD
             // -------------------------
             const stops = (pendingData.intermediateStops || []).filter(v => v && v.trim() !== "");
-            const route = [origin, destination, ...stops]; 
-            const totalDestinations = 1 + stops.length; // B + (any extra stops)
+            const route = [locationA, locationB, ...stops]; 
+            const totalLocations = 1 + stops.length; // B + (any extra stops)
 
             // -------------------------
             // MAP DESTINATIONS (B-G)
             // -------------------------
-            const destLetters = ['B', 'C', 'D', 'E', 'F', 'G'];
+            const locLetters = ['B', 'C', 'D', 'E', 'F', 'G'];
             for (let i = 0; i < 6; i++) {
-                const label = `Destination ${destLetters[i]}`;
+                const label = `Location ${locLetters[i]}`;
                 formData.append(label, route[i + 1] || "");
             }
 
@@ -386,19 +386,19 @@ if (finalSubmitBtn) {
             // MAP WAIT TIMES (Conditional)
             // -------------------------
             // Only send Wait B if C exists
-            if (totalDestinations > 1) {
+            if (totalLocations > 1) {
                 formData.append("waitTimeB", document.getElementById('waitTimeB')?.value || "");
             } else {
                 formData.append("waitTimeB", "");
             }
 
-            // Only send Wait C, D, E, F if a destination follows them
+            // Only send Wait C, D, E, F if a location follows them
             const dynamicWaitSelects = document.querySelectorAll('select[name="waitTime[]"]');
             const waitLetters = ['C', 'D', 'E', 'F'];
 
             waitLetters.forEach((letter, index) => {
-                // index 0 = Wait C. If totalDestinations is 3 (B, C, D), 3 > 2 is true.
-                if (totalDestinations > (index + 2)) {
+                // index 0 = Wait C. If totalLocations is 3 (B, C, D), 3 > 2 is true.
+                if (totalLocations > (index + 2)) {
                     formData.append(`waitTime${letter}`, dynamicWaitSelects[index]?.value || "");
                 } else {
                     formData.append(`waitTime${letter}`, "");

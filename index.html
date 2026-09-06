@@ -67,13 +67,13 @@
 
         <h3>Route</h3>
         <small style="color:#666;">
-        Enter your route in order (A (Origin) → Destinations (B and onwards C → D → E → F → G if required))
+        Enter your route in order (Location A → Location B (and onwards to C → D → E → F → G if required))
         </small>
 
-        <!-- Origin -->
+        <!-- Location A -->
         <div class="route-stop">
-            <span class="stop-label">A (Origin)</span>
-            <select id="origin" required>
+            <span class="stop-label" style="font-weight: bold; font-size: 0.9rem; margin-top:0;">Location A</span>
+            <select id="locationA" required>
                 <option value="">Loading locations...</option>
             </select>
         </div>
@@ -82,8 +82,8 @@
         <div class="route-stop" style="margin-top: 15px;">
             <div style="display: flex; align-items: flex-end; gap: 10px;">
                 <div style="flex: 2;">
-                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">B (Destination)</label>
-                    <select id="destination" required style="width: 100%; padding: 8px;">
+                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">Location B</label>
+                    <select id="locationB" required style="width: 100%; padding: 8px;">
                         <option value="">Loading locations...</option>
                     </select>
                 </div>
