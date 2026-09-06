@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HM Air - Rotary Wing Quote Request</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div class="header-container" style="text-align: center; margin-top: 20px;">
+    <img src="LogoCN.jpeg" alt="HM Air Logo" style="max-width: 200px; height: auto;">
+    </div>
+
+    <form id="quoteForm">
+        <h2>Request a Rotary Wing (Helicopter) Quote</h2>
+        <p style="color:#555; font-size: 0.9rem; margin-top: -10px;">
+            Our helicopters can land at registered airstrips or almost anywhere with sufficient clear space.
+            For each location below, start typing to see suggested airstrips — or, if your pick-up or drop-off
+            isn't a registered airstrip, just type a description (e.g. property name, station, or GPS
+            coordinates) and our team will confirm access before your flight.
+        </p>
+
+        <!-- PERSONAL DETAILS -->
+        <label for="firstName">First name</label>
+        <input type="text" id="firstName" name="firstName" required>
+
+        <label for="surname">Surname</label>
+        <input type="text" id="surname" name="surname" required>
+
+        <label for="business">Business name (if applicable)</label>
+        <input type="text" id="business" name="business">
+
+        <label for="postal">Postal Address</label>
+        <input type="text" id="postal" name="postal" required>
+
+        <label for="suburb">Suburb / Town</label>
+        <input type="text" id="suburb" name="suburb" required>
+
+        <label for="state">State / Territory</label>
+        <select id="state" name="state" required>
+            <option value="">Select</option>
+            <option value="NT">NT</option>
+            <option value="NSW">NSW</option>
+            <option value="QLD">QLD</option>
+            <option value="SA">SA</option>
+            <option value="TAS">TAS</option>
+            <option value="VIC">VIC</option>
+            <option value="WA">WA</option>
+            <option value="ACT">ACT</option>
+        </select>
+
+        <label for="postcode">Postcode</label>
+        <input type="tel" id="postcode" name="postcode" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required>
+
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required>
+
+        <label for="phone">Phone</label>
+        <input type="tel" id="phone" name="phone" inputmode="tel" autocomplete="tel-national"
+                pattern="^(0\d{1}\s\d{4}\s\d{4}|04\d{2}\s\d{3}\s\d{3})$"
+                title="Enter a valid 10-digit number starting with 0"
+            required>
+
+        <label for="passengers">Number of passengers</label>
+        <input type="number" id="passengers" name="passengers" min="1" max="10" required>
+
+        <hr>
+
+        <h3>Route</h3>
+        <small style="color:#666;">
+        Enter your route in order (Location A → Location B (and onwards to C → D → E → F → G if required)).
+        Pick a suggested airstrip, or type your own location description.
+        </small>
+
+        <datalist id="airstripOptions"></datalist>
+
+        <!-- Location A -->
+        <div class="route-stop">
+            <span class="stop-label" style="font-weight: bold; font-size: 0.9rem; margin-top:0;">Location A (pick-up)</span>
+            <input type="text" id="locationA" list="airstripOptions" placeholder="Airstrip, property name, or description" required style="width: 100%; padding: 8px;">
+        </div>
+
+        <!-- Destination -->
+        <div class="route-stop" style="margin-top: 15px;">
+            <div style="display: flex; align-items: flex-end; gap: 10px;">
+                <div style="flex: 2;">
+                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">Location B</label>
+                    <input type="text" id="locationB" list="airstripOptions" placeholder="Airstrip, property name, or description" required style="width: 100%; padding: 8px;">
+                </div>
+
+                <div id="waitAtBContainer" class="wait-time-group" style="flex: 1; min-width: 130px; display: none; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff;">
+                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Wait at B:</label>
+                    <select name="waitTimeB" id="waitTimeB" style="width: 100%; padding: 4px; margin-top: 4px;"></select>
+                </div>
+
+                <div style="width: 40px;"></div>
+            </div>
+        </div>
+
+        <div id="legsContainer"></div>
+
+        <button type="button" id="addLegBtn" style="background-color:#28a745; width:auto; padding:5px 15px; margin:10px 0;">
+            + Add Stop
+        </button>
+
+        <hr>
+
+        <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+            <div style="flex: 1;">
+                <label for="departureDate">Departure Date:</label>
+                <input type="date" id="departureDate" name="departureDate" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            </div>
+            <div style="flex: 1;">
+                <label for="departureTime">Preferred Time:</label>
+                <select id="departureTime" name="departureTime" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                    </select>
+            </div>
+        </div>
+
+        <label for="accessNotes">Landing Site / Access Notes (optional)</label>
+        <textarea id="accessNotes" name="accessNotes" rows="3" placeholder="e.g. clear paddock approx. 50m x 50m, nearest powerlines 200m to the north, ground firm and level" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-family:inherit;"></textarea>
+
+        <div id="routeMap" style="height: 300px; margin: 20px 0;"></div>
+
+        <p id="unresolvedNotice" style="display:none; font-size: 0.85rem; color:#8a6d3b; background:#fcf8e3; border:1px solid #faebcc; padding:8px 12px; border-radius:4px;"></p>
+
+        <button type="submit" id="submitBtn">Submit Quote Request</button>
+
+        <!-- Hidden fields -->
+        <input type="hidden" name="address" id="address">
+
+    </form>
+
+    <div class="form-footer" style="text-align: center; margin-top: 30px; padding: 20px; color: #555; border-top: 1px solid #eee;">
+    <p>For more complicated booking requests, please contact us at
+       <a href="mailto:quotes@hmair.com.au">quotes@hmair.com.au</a>
+       or call <strong>08 8975 0777</strong>.
+    </p>
+    <p>Website updated 6 Sep 2026</p>
+    </div>
+
+    <div id="confirmModal" class="modal">
+    <div class="modal-content">
+        <h3>Review Your Quote Request</h3>
+        <hr>
+        <div id="summaryArea">
+            </div>
+        <hr>
+        <div class="modal-footer">
+            <button type="button" id="editBtn" class="secondary-btn">Edit Details</button>
+            <button type="button" id="finalSubmitBtn" class="primary-btn">Confirm & Send</button>
+        </div>
+    </div>
+</div>
+   <script src="rotary-script.js"></script>
+</body>
+</html>
