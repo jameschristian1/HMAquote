@@ -17,12 +17,12 @@
     </div>
 
     <form id="quoteForm">
-        <h2>Request a Rotary Wing (Helicopter) Quote</h2>
+        <h2>Request a Rotary (Helicopter) Quote</h2>
         <p style="color:#555; font-size: 0.9rem; margin-top: -10px;">
             Our helicopters can land at registered airstrips or almost anywhere with sufficient clear space.
-            For each location below, start typing to see suggested airstrips — or, if your pick-up or drop-off
-            isn't a registered airstrip, just type a description (e.g. property name, station, or GPS
-            coordinates) and our team will confirm access before your flight.
+            For each location below, start typing to see suggested airstrips — or click into a location field,
+            then click the map to drop a pin at your pick-up or drop-off point. Our team will confirm access
+            before your flight.
         </p>
 
         <!-- PERSONAL DETAILS -->
@@ -125,7 +125,11 @@
         <label for="accessNotes">Landing Site / Access Notes (optional)</label>
         <textarea id="accessNotes" name="accessNotes" rows="3" placeholder="e.g. clear paddock approx. 50m x 50m, nearest powerlines 200m to the north, ground firm and level" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-family:inherit;"></textarea>
 
-        <div id="routeMap" style="height: 300px; margin: 20px 0;"></div>
+        <div id="mapClickHint" style="font-size: 0.85rem; color:#555; background:#f0f7ff; border:1px solid #d0e4ff; border-radius:4px; padding:6px 10px; margin-top:20px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+            <span id="activeFieldLabel">Click into a location field above, then click the map to set that location.</span>
+            <span>🖱️ <b id="cursorLatLon">—</b></span>
+        </div>
+        <div id="routeMap" style="height: 300px; margin: 0 0 20px 0;"></div>
 
         <p id="unresolvedNotice" style="display:none; font-size: 0.85rem; color:#8a6d3b; background:#fcf8e3; border:1px solid #faebcc; padding:8px 12px; border-radius:4px;"></p>
 

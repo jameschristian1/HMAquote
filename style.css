@@ -46,6 +46,11 @@ button {
     cursor: pointer; 
 }
 
+.active-location-target {
+    border: 2px solid #004a99 !important;
+    background-color: #f0f7ff;
+}
+
 #submitBtn { background-color: #004a99; color: white; }
 #addLegBtn { background-color: #28a745; color: white; margin-top: 10px; }
 

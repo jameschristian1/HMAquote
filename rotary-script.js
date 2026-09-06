@@ -15,6 +15,8 @@ let airstripData = [];
 let map;
 let routeLine;
 let markers = [];
+let activeLocationInput = null;
+let customLocationCoords = new Map(); // input element -> [lat, lon], for map-click-set points
 
 function initMap() {
     map = L.map('routeMap').setView([-25.2744, 133.7751], 4); // Australia default
@@ -22,6 +24,59 @@ function initMap() {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
+
+    map.on('mousemove', (e) => {
+        const el = document.getElementById('cursorLatLon');
+        if (el) el.textContent = e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5);
+    });
+
+    map.on('click', (e) => {
+        if (!activeLocationInput) {
+            alert("Please click into a location field first (e.g. Location A), then click the map.");
+            return;
+        }
+
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+
+        activeLocationInput.value = `Custom location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+        customLocationCoords.set(activeLocationInput, [lat, lon]);
+
+        advanceToNextLocationField();
+        scheduleRouteUpdate();
+    });
+}
+
+function getLocationInputsInOrder() {
+    return [
+        document.getElementById('locationA'),
+        document.getElementById('locationB'),
+        ...Array.from(document.querySelectorAll('input[name="intermediateStop[]"]'))
+    ].filter(Boolean);
+}
+
+function setActiveLocationField(el) {
+    activeLocationInput = el;
+    document.querySelectorAll('.active-location-target').forEach(f => f.classList.remove('active-location-target'));
+    if (el) el.classList.add('active-location-target');
+
+    const label = document.getElementById('activeFieldLabel');
+    if (label) {
+        label.textContent = el
+            ? `Click the map to set this location (currently editing: "${el.value || el.placeholder}")`
+            : 'Click into a location field above, then click the map to set that location.';
+    }
+}
+
+function advanceToNextLocationField() {
+    const fields = getLocationInputsInOrder();
+    const currentIndex = fields.indexOf(activeLocationInput);
+    if (currentIndex === -1) return;
+    const next = fields[currentIndex + 1];
+    if (next) {
+        next.focus();
+        setActiveLocationField(next);
+    }
 }
 
 window.addEventListener('load', initMap);
@@ -89,11 +144,7 @@ function populateSharedDatalist() {
 function updateRouteMap() {
     if (!map) return;
 
-    const stopInputs = [
-        document.getElementById('locationA'),
-        document.getElementById('locationB'),
-        ...Array.from(document.querySelectorAll('input[name="intermediateStop[]"]'))
-    ];
+    const stopInputs = getLocationInputsInOrder();
 
     const resolvedPoints = [];
     const unresolvedLabels = [];
@@ -103,15 +154,16 @@ function updateRouteMap() {
         const value = input?.value?.trim();
         if (!value) return;
 
-        const coords = findAirstripCoords(value);
+        const customCoords = customLocationCoords.get(input);
+        const coords = customCoords || findAirstripCoords(value);
+
         if (coords) {
-            resolvedPoints.push({ label: labels[i] || "?", coords, index: resolvedPoints.length, total: 0 });
+            resolvedPoints.push({ label: labels[i] || "?", coords });
         } else {
             unresolvedLabels.push(`${labels[i] || "?"}: "${value}"`);
         }
     });
 
-    // --- RENDER MARKERS/LINE (only for resolved, mappable points) ---
     markers.forEach(m => map.removeLayer(m));
     markers = [];
     if (routeLine) map.removeLayer(routeLine);
@@ -121,7 +173,7 @@ function updateRouteMap() {
     resolvedPoints.forEach((p, i) => {
         let type = "stop";
         if (i === 0) type = "locationA";
-        if (i === resolvedPoints.length - 1) type = "location";
+        if (i === resolvedPoints.length - 1) type = "destination";
 
         const marker = L.marker(p.coords, {
             icon: L.divIcon({
@@ -141,7 +193,6 @@ function updateRouteMap() {
         }
     }
 
-    // --- Note any stops we couldn't map, so the client knows they were captured ---
     const notice = document.getElementById('unresolvedNotice');
     if (notice) {
         if (unresolvedLabels.length > 0) {
@@ -202,7 +253,14 @@ if (addLegBtn) {
 
 function removeLeg(id) {
     const element = document.getElementById(id);
-    if (element) element.remove();
+    if (element) {
+        const input = element.querySelector('input[name="intermediateStop[]"]');
+        if (input) {
+            customLocationCoords.delete(input);
+            if (activeLocationInput === input) setActiveLocationField(null);
+        }
+        element.remove();
+    }
 
     const currentLegs = document.querySelectorAll('.leg-row').length;
     if (currentLegs === 0) {
@@ -229,6 +287,18 @@ function bindRouteListeners() {
     document.addEventListener('input', (e) => {
         if (e.target && e.target.name === 'intermediateStop[]') {
             scheduleRouteUpdate();
+        }
+        // Manually editing a field invalidates any coordinate set by clicking the map
+        if (e.target && (e.target.id === 'locationA' || e.target.id === 'locationB' || e.target.name === 'intermediateStop[]')) {
+            if (customLocationCoords.has(e.target)) {
+                customLocationCoords.delete(e.target);
+            }
+        }
+    });
+
+    document.addEventListener('focusin', (e) => {
+        if (e.target && (e.target.id === 'locationA' || e.target.id === 'locationB' || e.target.name === 'intermediateStop[]')) {
+            setActiveLocationField(e.target);
         }
     });
 }
