@@ -247,7 +247,14 @@ if (addLegBtn) {
         `;
 
         legsContainer.appendChild(legDiv);
-        legDiv.querySelector('input').addEventListener('input', scheduleRouteUpdate);
+        const newInput = legDiv.querySelector('input');
+        newInput.addEventListener('input', scheduleRouteUpdate);
+
+        // Automatically make the newly added stop the active map-click
+        // target, so the very next map click fills THIS stop rather than
+        // silently overwriting whichever field was last active.
+        setActiveLocationField(newInput);
+        newInput.focus();
     });
 }
 
