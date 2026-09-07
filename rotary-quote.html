@@ -93,6 +93,14 @@
                     <input type="text" id="locationB" list="airstripOptions" placeholder="Airstrip, property name, description, or GPS coordinates" required style="width: 100%; padding: 8px;">
                 </div>
 
+                <div style="flex: 0.9; min-width: 110px;">
+                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Stop type:</label>
+                    <select id="stopTypeB" style="width: 100%; padding: 8px;">
+                        <option value="LAND">🛬 Land</option>
+                        <option value="WAYPOINT">📍 Fly over</option>
+                    </select>
+                </div>
+
                 <div id="waitAtBContainer" class="wait-time-group" style="flex: 1; min-width: 130px; display: none; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff;">
                     <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Wait at B:</label>
                     <select name="waitTimeB" id="waitTimeB" style="width: 100%; padding: 4px; margin-top: 4px;"></select>

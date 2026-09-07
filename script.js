@@ -37,45 +37,41 @@ function updateRouteMap() {
     if (!map) return;
 
     const points = [];
+    const stopTypes = [];
 
-    // 1. Get Location A (A)
     const locationA = getSelectedLatLng('locationA');
-    if (locationA) points.push(locationA);
+    if (locationA) { points.push(locationA); stopTypes.push('LAND'); }
 
-    // 2. Get Location (B)
     const locationB = getSelectedLatLng('locationB');
-    if (locationB) points.push(locationB);
+    if (locationB) {
+        points.push(locationB);
+        stopTypes.push(document.getElementById('stopTypeB')?.value || 'LAND');
+    }
 
-    // 3. Get all the dynamically added stops (C, D, E...)
-    const extraStops = Array.from(document.querySelectorAll('select[name="intermediateStop[]"]'))
-        .map(s => {
-            const opt = s.selectedOptions[0];
-            if (!opt || !opt.dataset.lat) return null;
-            const lat = parseFloat(opt.dataset.lat);
-            const lon = parseFloat(opt.dataset.lon);
-            return isNaN(lat) ? null : [lat, lon];
-        })
-        .filter(Boolean);
+    Array.from(document.querySelectorAll('.leg-row')).forEach(row => {
+        const s = row.querySelector('select[name="intermediateStop[]"]');
+        const opt = s?.selectedOptions[0];
+        if (!opt || !opt.dataset.lat) return;
+        const lat = parseFloat(opt.dataset.lat);
+        const lon = parseFloat(opt.dataset.lon);
+        if (isNaN(lat)) return;
+        points.push([lat, lon]);
+        stopTypes.push(row.querySelector('select[name="stopType[]"]')?.value || 'LAND');
+    });
 
-    // Add them to the end of the chain
-    points.push(...extraStops);
-
-    // --- RENDER LOGIC ---
     markers.forEach(m => map.removeLayer(m));
     markers = [];
     if (routeLine) map.removeLayer(routeLine);
     if (points.length === 0) return;
 
-    // Use labels A, B, C, D, E, F, G in order
     const labels = ["A", "B", "C", "D", "E", "F", "G"];
 
     points.forEach((p, i) => {
         const label = labels[i] || "?";
-        
-        // Define pin color/style logic
-        let type = "stop"; 
-        if (i === 0) type = "locationA"; // A is locationA
-        if (i === points.length - 1) type = "destination";
+        let type = "stop";
+        if (i === 0) type = "locationA";
+        else if (i === points.length - 1) type = "destination";
+        else if (stopTypes[i] === "WAYPOINT") type = "waypoint";
 
         const marker = L.marker(p, {
             icon: L.divIcon({
@@ -88,14 +84,48 @@ function updateRouteMap() {
         markers.push(marker);
     });
 
-    routeLine = L.polyline(points, {
-        color: 'blue',
-        weight: 3
-    }).addTo(map);
-
+    routeLine = L.polyline(points, { color: 'blue', weight: 3 }).addTo(map);
     if (points.length >= 2) {
         map.fitBounds(routeLine.getBounds(), { padding: [20, 20], maxZoom: 8 });
     }
+}
+
+/* ========================================
+   WAYPOINT vs LANDING STOP LOGIC
+   ======================================== */
+
+// Every stop-type select currently on the page, in route order (B, C, D...).
+function getStopTypeSelectsInOrder() {
+    const bSelect = document.getElementById('stopTypeB');
+    const legSelects = Array.from(document.querySelectorAll('.leg-row select[name="stopType[]"]'));
+    return [bSelect, ...legSelects].filter(Boolean);
+}
+
+// The final stop is always a landing — force and lock it so a customer
+// can't submit a route that "ends" on a fly-over point.
+function enforceEndpointStopTypes() {
+    const selects = getStopTypeSelectsInOrder();
+    selects.forEach((sel, idx) => {
+        const isLast = (idx === selects.length - 1);
+        sel.disabled = isLast;
+        sel.title = isLast ? "The final stop on your route is always a landing." : "";
+        if (isLast) sel.value = "LAND";
+    });
+}
+
+// A waypoint is a fly-over point — nothing to wait for there, so hide
+// (and stop billing/collecting) its wait-time control.
+function updateWaitVisibility() {
+    const selects = getStopTypeSelectsInOrder();
+    selects.forEach((sel, idx) => {
+        const isLast = (idx === selects.length - 1);
+        const isWaypoint = sel.value === "WAYPOINT";
+        const row = (sel.id === 'stopTypeB')
+            ? document.getElementById('waitAtBContainer')
+            : sel.closest('.leg-row')?.querySelector('.wait-time-group');
+        if (!row) return;
+        row.style.setProperty('display', (!isLast && !isWaypoint) ? 'block' : 'none', 'important');
+    });
 }
 
 async function loadAirstrips() {
@@ -171,7 +201,15 @@ if (addLegBtn) {
                     <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">Location ${legLabel}</label>
                     <select name="intermediateStop[]" required style="width: 100%; padding: 8px;"></select>
                 </div>
-                
+
+                <div style="flex: 0.9; min-width: 110px;">
+                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Stop type:</label>
+                    <select name="stopType[]" style="width: 100%; padding: 8px;">
+                        <option value="LAND">🛬 Land</option>
+                        <option value="WAYPOINT">📍 Fly over</option>
+                    </select>
+                </div>
+
                 <div class="wait-time-group" style="flex: 1; min-width: 130px; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff;">
                     <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Wait at ${legLabel}:</label>
                     <select name="waitTime[]" style="width: 100%; padding: 4px; margin-top: 4px;">
@@ -183,23 +221,26 @@ if (addLegBtn) {
                         style="background: #dc3545; color: white; width: 40px; height: 38px; border: none; border-radius: 4px; cursor: pointer; margin-top: 0; padding: 0;">X</button>
             </div>
         `;
-        
+
         legsContainer.appendChild(legDiv);
-        populateDropdown(legDiv.querySelector('select'));
-        legDiv.querySelector('select').addEventListener('change', scheduleRouteUpdate);
+        populateDropdown(legDiv.querySelector('select[name="intermediateStop[]"]'));
+        legDiv.querySelector('select[name="intermediateStop[]"]').addEventListener('change', scheduleRouteUpdate);
+        legDiv.querySelector('select[name="stopType[]"]').addEventListener('change', () => {
+            updateWaitVisibility();
+            scheduleRouteUpdate();
+        });
+
+        enforceEndpointStopTypes();
+        updateWaitVisibility();
     });
 }
 
 function removeLeg(id) {
     const element = document.getElementById(id);
     if (element) element.remove();
-    
-    // If no more legs (C, D, etc.), hide Wait at B
-    const currentLegs = document.querySelectorAll('.leg-row').length;
-    if (currentLegs === 0) {
-        const waitAtB = document.getElementById('waitAtBContainer');
-        if (waitAtB) waitAtB.style.display = 'none';
-    }
+
+    enforceEndpointStopTypes();
+    updateWaitVisibility();
     scheduleRouteUpdate();
 }
 
@@ -213,15 +254,20 @@ function scheduleRouteUpdate() {
 function bindRouteListeners() {
     const locationA = document.getElementById('locationA');
     const locationB = document.getElementById('locationB');
+    const stopTypeB = document.getElementById('stopTypeB');
 
     if (locationA) locationA.addEventListener('change', scheduleRouteUpdate);
     if (locationB) locationB.addEventListener('change', scheduleRouteUpdate);
+    if (stopTypeB) stopTypeB.addEventListener('change', () => { updateWaitVisibility(); scheduleRouteUpdate(); });
 
     document.addEventListener('change', (e) => {
         if (e.target && e.target.name === 'intermediateStop[]') {
             scheduleRouteUpdate();
         }
     });
+
+    enforceEndpointStopTypes();
+    updateWaitVisibility();
 }
 
 /* ========================================
@@ -405,6 +451,17 @@ if (finalSubmitBtn) {
                 } else {
                     formData.append(`waitTime${letter}`, "");
                 }
+            });
+
+            // -------------------------
+            // MAP STOP TYPES (B always exists; C-F only if that leg exists)
+            // -------------------------
+            formData.append("stopTypeB", document.getElementById('stopTypeB')?.value || "LAND");
+
+            const dynamicStopTypeSelects = document.querySelectorAll('select[name="stopType[]"]');
+            waitLetters.forEach((letter, index) => {
+                const sel = dynamicStopTypeSelects[index];
+                formData.append(`stopType${letter}`, sel ? sel.value : "");
             });
 
             // -------------------------
