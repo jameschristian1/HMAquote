@@ -171,7 +171,7 @@ function updateRouteMap() {
         const coords = customCoords || findAirstripCoords(value) || parseTypedCoordinates(value);
 
         if (coords) {
-            resolvedPoints.push({ label: labels[i] || "?", coords });
+            resolvedPoints.push({ label: labels[i] || "?", coords, input });
         } else {
             unresolvedLabels.push(`${labels[i] || "?"}: "${value}"`);
         }
@@ -189,13 +189,22 @@ function updateRouteMap() {
         if (i === resolvedPoints.length - 1) type = "destination";
 
         const marker = L.marker(p.coords, {
+            draggable: true,
             icon: L.divIcon({
                 className: "route-label-marker",
                 html: `<div class="route-pin ${type}">${p.label}</div>`,
                 iconSize: [26, 26],
                 iconAnchor: [13, 13]
             })
-        }).addTo(map);
+        }).addTo(map).bindTooltip("Drag to move this location", { direction: 'top', offset: [0, -10] });
+
+        marker.on('dragend', () => {
+            const newPos = marker.getLatLng();
+            p.input.value = `Custom location (${newPos.lat.toFixed(5)}, ${newPos.lng.toFixed(5)})`;
+            customLocationCoords.set(p.input, [newPos.lat, newPos.lng]);
+            scheduleRouteUpdate();
+        });
+
         markers.push(marker);
     });
 
