@@ -20,9 +20,9 @@
         <h2>Request a Rotary (Helicopter) Quote</h2>
         <p style="color:#555; font-size: 0.9rem; margin-top: -10px;">
             Our helicopters can land at registered airstrips or almost anywhere with sufficient clear space.
-            For each location below, start typing to see suggested airstrips — or click into a location field,
-            then click the map to drop a pin at your pick-up or drop-off point. Our team will confirm access
-            before your flight.
+            For each location below, start typing to see suggested airstrips, click into a field then click
+            the map to drop a pin, or type GPS coordinates directly (e.g. -23.753, 133.875 — the format
+            Google Maps gives you when you long-press a spot). Our team will confirm access before your flight.
         </p>
 
         <!-- PERSONAL DETAILS -->
@@ -82,7 +82,7 @@
         <!-- Location A -->
         <div class="route-stop">
             <span class="stop-label" style="font-weight: bold; font-size: 0.9rem; margin-top:0;">Location A (pick-up)</span>
-            <input type="text" id="locationA" list="airstripOptions" placeholder="Airstrip, property name, or description" required style="width: 100%; padding: 8px;">
+            <input type="text" id="locationA" list="airstripOptions" placeholder="Airstrip, property name, description, or GPS coordinates" required style="width: 100%; padding: 8px;">
         </div>
 
         <!-- Destination -->
@@ -90,7 +90,7 @@
             <div style="display: flex; align-items: flex-end; gap: 10px;">
                 <div style="flex: 2;">
                     <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">Location B</label>
-                    <input type="text" id="locationB" list="airstripOptions" placeholder="Airstrip, property name, or description" required style="width: 100%; padding: 8px;">
+                    <input type="text" id="locationB" list="airstripOptions" placeholder="Airstrip, property name, description, or GPS coordinates" required style="width: 100%; padding: 8px;">
                 </div>
 
                 <div id="waitAtBContainer" class="wait-time-group" style="flex: 1; min-width: 130px; display: none; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff;">
@@ -123,7 +123,7 @@
         </div>
 
         <label for="accessNotes">Landing Site / Access Notes (optional)</label>
-        <textarea id="accessNotes" name="accessNotes" rows="3" placeholder="e.g. clear paddock approx. 50m x 50m, nearest powerlines 200m to the north, ground firm and level" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-family:inherit;"></textarea>
+        <textarea id="accessNotes" name="accessNotes" rows="3" placeholder="Airstrip, property name, description, or GPS coordinates" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-family:inherit;"></textarea>
 
         <div id="mapClickHint" style="font-size: 0.85rem; color:#555; background:#f0f7ff; border:1px solid #d0e4ff; border-radius:4px; padding:6px 10px; margin-top:20px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
             <span id="activeFieldLabel">Click into a location field above, then click the map to set that location.</span>

@@ -105,6 +105,19 @@ function getInputLatLng(inputId) {
     return findAirstripCoords(el.value);
 }
 
+function parseTypedCoordinates(value) {
+    if (!value) return null;
+    // Accepts "lat, lon" or "lat,lon" — e.g. "-23.6980, 133.8807",
+    // matching what a client would copy straight out of Google Maps.
+    const match = value.trim().match(/^(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/);
+    if (!match) return null;
+    const lat = parseFloat(match[1]);
+    const lon = parseFloat(match[2]);
+    if (isNaN(lat) || isNaN(lon)) return null;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    return [lat, lon];
+}
+
 async function loadAirstrips() {
     try {
         const response = await fetch(SHEET_URL);
@@ -155,7 +168,7 @@ function updateRouteMap() {
         if (!value) return;
 
         const customCoords = customLocationCoords.get(input);
-        const coords = customCoords || findAirstripCoords(value);
+        const coords = customCoords || findAirstripCoords(value) || parseTypedCoordinates(value);
 
         if (coords) {
             resolvedPoints.push({ label: labels[i] || "?", coords });
