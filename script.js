@@ -354,6 +354,8 @@ if (finalSubmitBtn) {
             // -------------------------
             const formData = new URLSearchParams();
 
+            formData.append("formType", "fixedwing");
+
             // Contact & Personal Details
             formData.append("firstName", get("firstName"));
             formData.append("surname", get("surname"));

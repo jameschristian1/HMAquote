@@ -8,7 +8,7 @@ const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsQOS8r4GbYT
 // submission would be written into the fixed-wing Requests sheet with
 // mismatched columns, corrupting data silently. Replace this once a real
 // rotary doPost handler + sheet exists.
-const APPS_SCRIPT_URL = 'REPLACE_ME_ROTARY_BACKEND_NOT_YET_BUILT';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxChdsB11TPcY3TATTVYFq2Vg7Mi_Qh2NnRuoyqKJgof3Z6Mm5CXUnSmgj5gjOJbzYXww/exec';
 
 let airstripData = [];
 
@@ -442,11 +442,6 @@ if (editBtn) editBtn.onclick = () => modal.style.display = 'none';
 if (finalSubmitBtn) {
     finalSubmitBtn.onclick = async () => {
 
-        if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.startsWith('REPLACE_ME')) {
-            alert("Online rotary wing quote requests aren't available just yet — please contact us directly at quotes@hmair.com.au or call 08 8975 0777, and we'll help arrange your booking.");
-            return;
-        }
-
         finalSubmitBtn.innerText = "Sending...";
         finalSubmitBtn.disabled = true;
 
@@ -463,6 +458,7 @@ if (finalSubmitBtn) {
 
             const formData = new URLSearchParams();
 
+            formData.append("formType", "rotary");
             formData.append("firstName", get("firstName"));
             formData.append("surname", get("surname"));
             formData.append("business", get("business"));
