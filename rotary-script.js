@@ -105,17 +105,21 @@ function getInputLatLng(inputId) {
     return findAirstripCoords(el.value);
 }
 
-function parseTypedCoordinates(value) {
-    if (!value) return null;
-    // Accepts "lat, lon" or "lat,lon" — e.g. "-23.6980, 133.8807",
-    // matching what a client would copy straight out of Google Maps.
-    const match = value.trim().match(/^(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/);
-    if (!match) return null;
-    const lat = parseFloat(match[1]);
-    const lon = parseFloat(match[2]);
-    if (isNaN(lat) || isNaN(lon)) return null;
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-    return [lat, lon];
+/**
+ * Server-side twin of rotary-script.js's client-side parseTypedCoordinates.
+ * Matches "lat, lon" wherever it appears in the string — covers both a
+ * bare paste from Google Maps ("-23.698, 133.881") and the map-click
+ * feature's own generated label ("Custom location (-23.698, 133.881)").
+ */
+function parseTypedCoordinatesServer(value) {
+  if (!value) return null;
+  const match = value.toString().trim().match(/(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/);
+  if (!match) return null;
+  const lat = parseFloat(match[1]);
+  const lon = parseFloat(match[2]);
+  if (isNaN(lat) || isNaN(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
 }
 
 async function loadAirstrips() {
