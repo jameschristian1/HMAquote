@@ -10,13 +10,27 @@ const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsQOS8r4GbYT
 // rotary doPost handler + sheet exists.
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxChdsB11TPcY3TATTVYFq2Vg7Mi_Qh2NnRuoyqKJgof3Z6Mm5CXUnSmgj5gjOJbzYXww/exec';
 
+// Max destinations beyond Location A. A + 10 destinations = Locations A-K.
+const MAX_DESTINATIONS = 10;
+
 let airstripData = [];
 
 let map;
 let routeLine;
 let markers = [];
-let activeLocationInput = null;
-let customLocationCoords = new Map(); // input element -> [lat, lon], for map-click-set points
+
+// Location A is tracked separately (fixed origin, not part of the
+// open-ended list). routeStops holds the up to 10 destination stops
+// (B through K) in order - single source of truth for the whole
+// route, same convention the ops Sandboxes use for compiledRouteStops.
+let locationAStop = { name: "", lat: null, lon: null, isCustomLocation: false };
+let routeStops = []; // [{ name, lat, lon, isCustomLocation, stopType, groundWaitMins }]
+
+// Which field a map click or marker drag should update: "A" for the
+// origin, or an integer index into routeStops for a destination. Using a
+// logical key rather than a raw DOM element reference means it stays valid
+// across re-renders, which replace the destination rows' actual DOM nodes.
+let activeFieldKey = null;
 
 function initMap() {
     map = L.map('routeMap').setView([-25.2744, 133.7751], 4); // Australia default
@@ -31,55 +45,70 @@ function initMap() {
     });
 
     map.on('click', (e) => {
-        if (!activeLocationInput) {
+        if (activeFieldKey === null) {
             alert("Please click into a location field first (e.g. Location A), then click the map.");
             return;
         }
-
-        const lat = e.latlng.lat;
-        const lon = e.latlng.lng;
-
-        activeLocationInput.value = `Custom location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
-        customLocationCoords.set(activeLocationInput, [lat, lon]);
-
+        setStopFromCoords(activeFieldKey, e.latlng.lat, e.latlng.lng);
+        renderRouteStops();
         advanceToNextLocationField();
         scheduleRouteUpdate();
     });
 }
 
-function getLocationInputsInOrder() {
-    return [
-        document.getElementById('locationA'),
-        document.getElementById('locationB'),
-        ...Array.from(document.querySelectorAll('input[name="intermediateStop[]"]'))
-    ].filter(Boolean);
+window.addEventListener('load', initMap);
+
+function setStopFromCoords(key, lat, lon) {
+    const label = `Custom location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
+    if (key === "A") {
+        locationAStop = { name: label, lat, lon, isCustomLocation: true };
+        const el = document.getElementById('locationA');
+        if (el) el.value = label;
+    } else if (routeStops[key]) {
+        routeStops[key].name = label;
+        routeStops[key].lat = lat;
+        routeStops[key].lon = lon;
+        routeStops[key].isCustomLocation = true;
+    }
 }
 
-function setActiveLocationField(el) {
-    activeLocationInput = el;
+function getLocationFieldKeysInOrder() {
+    return ["A", ...routeStops.map((_, i) => i)];
+}
+
+function getLocationInputElement(key) {
+    if (key === "A") return document.getElementById('locationA');
+    const row = document.querySelector(`.leg-row[data-index="${key}"]`);
+    return row ? row.querySelector('[data-role="location-input"]') : null;
+}
+
+function setActiveLocationField(key) {
+    activeFieldKey = key;
     document.querySelectorAll('.active-location-target').forEach(f => f.classList.remove('active-location-target'));
+
+    const el = key !== null ? getLocationInputElement(key) : null;
     if (el) el.classList.add('active-location-target');
 
     const label = document.getElementById('activeFieldLabel');
     if (label) {
+        const currentVal = key === "A" ? locationAStop.name : (routeStops[key] ? routeStops[key].name : "");
         label.textContent = el
-            ? `Click the map to set this location (currently editing: "${el.value || el.placeholder}")`
+            ? `Click the map to set this location (currently editing: "${currentVal || el.placeholder}")`
             : 'Click into a location field above, then click the map to set that location.';
     }
 }
 
 function advanceToNextLocationField() {
-    const fields = getLocationInputsInOrder();
-    const currentIndex = fields.indexOf(activeLocationInput);
+    const keys = getLocationFieldKeysInOrder();
+    const currentIndex = keys.indexOf(activeFieldKey);
     if (currentIndex === -1) return;
-    const next = fields[currentIndex + 1];
-    if (next) {
-        next.focus();
-        setActiveLocationField(next);
+    const nextKey = keys[currentIndex + 1];
+    if (nextKey !== undefined) {
+        setActiveLocationField(nextKey);
+        const el = getLocationInputElement(nextKey);
+        if (el) el.focus();
     }
 }
-
-window.addEventListener('load', initMap);
 
 /* ========================================
    AIRSTRIP LOOKUP (hybrid: known airstrip OR free-text description)
@@ -99,17 +128,37 @@ function findAirstripCoords(inputValue) {
     return [lat, lon];
 }
 
-function getInputLatLng(inputId) {
-    const el = document.getElementById(inputId);
-    if (!el) return null;
-    return findAirstripCoords(el.value);
+// Client-side coordinate parser for a typed "lat, lon" string (e.g. a
+// bare paste from Google Maps: "-23.698, 133.881"). This was previously
+// called from updateRouteMap() but never actually defined anywhere in
+// this file - only its server-side twin (parseTypedCoordinatesServer,
+// below) existed, meaning any typed-but-unmatched location silently threw
+// instead of resolving. Fixed here as part of this rewrite.
+function parseTypedCoordinates(value) {
+    if (!value) return null;
+    const match = value.toString().trim().match(/(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)/);
+    if (!match) return null;
+    const lat = parseFloat(match[1]);
+    const lon = parseFloat(match[2]);
+    if (isNaN(lat) || isNaN(lon)) return null;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    return [lat, lon];
+}
+
+function resolveStopCoords(stop) {
+    if (stop.isCustomLocation && stop.lat != null && stop.lon != null) return [stop.lat, stop.lon];
+    return findAirstripCoords(stop.name) || parseTypedCoordinates(stop.name);
 }
 
 /**
- * Server-side twin of rotary-script.js's client-side parseTypedCoordinates.
- * Matches "lat, lon" wherever it appears in the string — covers both a
- * bare paste from Google Maps ("-23.698, 133.881") and the map-click
- * feature's own generated label ("Custom location (-23.698, 133.881)").
+ * Server-side twin of this file's parseTypedCoordinates. Matches "lat, lon"
+ * wherever it appears in the string — covers both a bare paste from Google
+ * Maps ("-23.698, 133.881") and the map-click feature's own generated label
+ * ("Custom location (-23.698, 133.881)"). Not currently called by anything
+ * in this client file — kept here as the reference implementation for the
+ * Apps Script backend, where a real copy of this function should live as
+ * its own .gs function if the backend ever needs to re-resolve a typed
+ * location independently of what the client already sends.
  */
 function parseTypedCoordinatesServer(value) {
   if (!value) return null;
@@ -155,31 +204,24 @@ function populateSharedDatalist() {
     });
 }
 
-function getStopTypeForLocationInput(input, index) {
-    if (index === 0) return "LAND"; // pickup
-    if (input.id === 'locationB') return document.getElementById('stopTypeB')?.value || 'LAND';
-    const row = input.closest('.leg-row');
-    return row?.querySelector('select[name="stopType[]"]')?.value || 'LAND';
-}
-
 function updateRouteMap() {
     if (!map) return;
 
-    const stopInputs = getLocationInputsInOrder();
+    const allStops = [
+        { key: "A", stopType: "LAND", name: locationAStop.name, lat: locationAStop.lat, lon: locationAStop.lon, isCustomLocation: locationAStop.isCustomLocation },
+        ...routeStops.map((s, i) => ({ key: i, ...s }))
+    ];
+
     const resolvedPoints = [];
     const unresolvedLabels = [];
-    const labels = ["A", "B", "C", "D", "E", "F", "G"];
+    const labels = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
 
-    stopInputs.forEach((input, i) => {
-        const value = input?.value?.trim();
+    allStops.forEach((stop, i) => {
+        const value = (stop.name || "").trim();
         if (!value) return;
-
-        const customCoords = customLocationCoords.get(input);
-        const coords = customCoords || findAirstripCoords(value) || parseTypedCoordinates(value);
-        const stopType = getStopTypeForLocationInput(input, i);
-
+        const coords = resolveStopCoords(stop);
         if (coords) {
-            resolvedPoints.push({ label: labels[i] || "?", coords, input, stopType });
+            resolvedPoints.push({ label: labels[i] || "?", coords, key: stop.key, stopType: stop.stopType });
         } else {
             unresolvedLabels.push(`${labels[i] || "?"}: "${value}"`);
         }
@@ -209,8 +251,8 @@ function updateRouteMap() {
 
         marker.on('dragend', () => {
             const newPos = marker.getLatLng();
-            p.input.value = `Custom location (${newPos.lat.toFixed(5)}, ${newPos.lng.toFixed(5)})`;
-            customLocationCoords.set(p.input, [newPos.lat, newPos.lng]);
+            setStopFromCoords(p.key, newPos.lat, newPos.lng);
+            renderRouteStops();
             scheduleRouteUpdate();
         });
 
@@ -235,120 +277,145 @@ function updateRouteMap() {
 }
 
 /* ========================================
-   WAYPOINT vs LANDING STOP LOGIC
+   DYNAMIC ROUTE STOPS (Location B onward)
    ======================================== */
-function getStopTypeSelectsInOrder() {
-    const bSelect = document.getElementById('stopTypeB');
-    const legSelects = Array.from(document.querySelectorAll('.leg-row select[name="stopType[]"]'));
-    return [bSelect, ...legSelects].filter(Boolean);
-}
 
-function enforceEndpointStopTypes() {
-    const selects = getStopTypeSelectsInOrder();
-    selects.forEach((sel, idx) => {
-        const isLast = (idx === selects.length - 1);
-        sel.disabled = isLast;
-        sel.title = isLast ? "The final stop on your route is always a landing." : "";
-        if (isLast) sel.value = "LAND";
+// Renders every destination row from routeStops. Rebuilds the destination
+// rows' DOM each time (add/remove/stop-type-change/drag), but NEVER on a
+// plain keystroke in a location field (see updateStopName) - that would
+// wipe focus and cursor position mid-typing.
+function renderRouteStops() {
+    // Keep Location A's displayed value in sync - it isn't part of this
+    // dynamic list, but a map click/drag can still set it programmatically.
+    const locAInput = document.getElementById('locationA');
+    if (locAInput && locAInput.value !== locationAStop.name) locAInput.value = locationAStop.name;
+
+    // Last stop is always a landing with no wait before it even has a
+    // control - enforced on the data itself, not just the display, same
+    // pattern as the ops Sandboxes' enforceEndpointStopTypes().
+    if (routeStops.length > 0) {
+        routeStops[routeStops.length - 1].stopType = "LAND";
+        routeStops[routeStops.length - 1].groundWaitMins = 0;
+    }
+
+    const container = document.getElementById('legsContainer');
+    if (!container) return;
+
+    const labels = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+
+    container.innerHTML = routeStops.map((stop, i) => {
+        const label = labels[i + 1] || "?";
+        const isLast = (i === routeStops.length - 1);
+        const isWaypoint = stop.stopType === "WAYPOINT";
+        const showWait = !isLast && !isWaypoint;
+        const waitMins = stop.groundWaitMins || 0;
+        const safeName = (stop.name || "").replace(/"/g, '&quot;');
+
+        return `
+          <div class="leg-row" data-index="${i}">
+            <div style="display: flex; align-items: flex-end; gap: 10px; margin-bottom: 15px;">
+                <div style="flex: 2;">
+                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">Location ${label}</label>
+                    <input type="text" data-role="location-input" list="airstripOptions" value="${safeName}"
+                        placeholder="Airstrip, property name, or description" required style="width: 100%; padding: 8px;">
+                </div>
+
+                <div style="flex: 0.9; min-width: 110px;">
+                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Stop type:</label>
+                    <select style="width: 100%; padding: 8px;" ${isLast ? 'disabled title="The final stop on your route is always a landing."' : ''} onchange="updateStopType(${i}, this.value)">
+                        <option value="LAND" ${stop.stopType === "LAND" ? "selected" : ""}>🛬 Land</option>
+                        <option value="WAYPOINT" ${isWaypoint ? "selected" : ""}>📍 Fly over</option>
+                    </select>
+                </div>
+
+                <div class="wait-time-group" style="flex: 1; min-width: 130px; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff; ${showWait ? '' : 'display:none;'}">
+                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Wait at ${label}:</label>
+                    <select style="width: 100%; padding: 4px; margin-top: 4px;" onchange="updateStopWait(${i}, this.value)">
+                        ${generateClockOptions(12, Math.floor(waitMins / 60), waitMins % 60)}
+                    </select>
+                </div>
+
+                <button type="button" onclick="removeRouteStop(${i})"
+                    style="background: #dc3545; color: white; width: 40px; height: 38px; border: none; border-radius: 4px; cursor: pointer; margin-top: 0; padding: 0;">X</button>
+            </div>
+          </div>`;
+    }).join('');
+
+    // Event listeners re-attached fresh each render, since the input
+    // elements themselves are newly created above.
+    container.querySelectorAll('[data-role="location-input"]').forEach((inputEl, i) => {
+        inputEl.addEventListener('input', () => updateStopName(i, inputEl.value));
+        inputEl.addEventListener('focus', () => setActiveLocationField(i));
     });
+
+    updateAddButtonState();
 }
 
-function updateWaitVisibility() {
-    const selects = getStopTypeSelectsInOrder();
-    selects.forEach((sel, idx) => {
-        const isLast = (idx === selects.length - 1);
-        const isWaypoint = sel.value === "WAYPOINT";
-        const row = (sel.id === 'stopTypeB')
-            ? document.getElementById('waitAtBContainer')
-            : sel.closest('.leg-row')?.querySelector('.wait-time-group');
-        if (!row) return;
-        row.style.setProperty('display', (!isLast && !isWaypoint) ? 'block' : 'none', 'important');
-    });
+// Typing only updates the data + schedules a map refresh - it deliberately
+// never calls renderRouteStops(), which would replace this very input's
+// DOM node mid-keystroke and lose focus/cursor position.
+function updateStopName(index, value) {
+    if (!routeStops[index]) return;
+    routeStops[index].name = value;
+    if (!value.startsWith("Custom location (")) {
+        routeStops[index].lat = null;
+        routeStops[index].lon = null;
+        routeStops[index].isCustomLocation = false;
+    }
+    scheduleRouteUpdate();
 }
 
-/* ========================================
-   DYNAMIC LEGS LOGIC
-   ======================================== */
+function updateStopType(index, value) {
+    if (!routeStops[index]) return;
+    routeStops[index].stopType = value;
+    if (value === "WAYPOINT") routeStops[index].groundWaitMins = 0;
+    renderRouteStops();
+    scheduleRouteUpdate();
+}
+
+function updateStopWait(index, hhmm) {
+    if (!routeStops[index]) return;
+    const parts = hhmm.split(':');
+    routeStops[index].groundWaitMins = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+}
+
+function removeRouteStop(index) {
+    routeStops.splice(index, 1);
+    if (activeFieldKey === index || (typeof activeFieldKey === "number" && activeFieldKey >= routeStops.length)) {
+        setActiveLocationField(null);
+    }
+    renderRouteStops();
+    scheduleRouteUpdate();
+}
+
+function updateAddButtonState() {
+    const btn = document.getElementById('addLegBtn');
+    if (!btn) return;
+    if (routeStops.length >= MAX_DESTINATIONS) {
+        btn.disabled = true;
+        btn.textContent = `Maximum ${MAX_DESTINATIONS} additional stops reached`;
+    } else {
+        btn.disabled = false;
+        btn.textContent = "+ Add Stop";
+    }
+}
+
 const addLegBtn = document.getElementById('addLegBtn');
 const legsContainer = document.getElementById('legsContainer');
 
 if (addLegBtn) {
     addLegBtn.addEventListener('click', () => {
-        const currentLegs = document.querySelectorAll('.leg-row').length;
-        if (currentLegs >= 5) return;
-
-        const labels = ['C', 'D', 'E', 'F', 'G'];
-        const legLabel = labels[currentLegs];
-
-        const waitAtB = document.getElementById('waitAtBContainer');
-        if (waitAtB) waitAtB.style.display = 'block';
-
-        const legId = Date.now();
-        const legDiv = document.createElement('div');
-        legDiv.className = 'leg-row';
-        legDiv.id = `leg-${legId}`;
-
-        legDiv.innerHTML = `
-            <div style="display: flex; align-items: flex-end; gap: 10px; margin-bottom: 15px;">
-                <div style="flex: 2;">
-                    <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">Location ${legLabel}</label>
-                    <input type="text" name="intermediateStop[]" list="airstripOptions" placeholder="Airstrip, property name, or description" required style="width: 100%; padding: 8px;">
-                </div>
-
-                <div style="flex: 0.9; min-width: 110px;">
-                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Stop type:</label>
-                    <select name="stopType[]" style="width: 100%; padding: 8px;">
-                        <option value="LAND">🛬 Land</option>
-                        <option value="WAYPOINT">📍 Fly over</option>
-                    </select>
-                </div>
-
-                <div class="wait-time-group" style="flex: 1; min-width: 130px; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff;">
-                    <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Wait at ${legLabel}:</label>
-                    <select name="waitTime[]" style="width: 100%; padding: 4px; margin-top: 4px;">
-                        ${generateClockOptions(12, 0, 30)}
-                    </select>
-                </div>
-
-                <button type="button" onclick="removeLeg('leg-${legId}')"
-                        style="background: #dc3545; color: white; width: 40px; height: 38px; border: none; border-radius: 4px; cursor: pointer; margin-top: 0; padding: 0;">X</button>
-            </div>
-        `;
-
-        legsContainer.appendChild(legDiv);
-        const newInput = legDiv.querySelector('input');
-        newInput.addEventListener('input', scheduleRouteUpdate);
-        legDiv.querySelector('select[name="stopType[]"]').addEventListener('change', () => {
-            updateWaitVisibility();
-            scheduleRouteUpdate();
-        });
-
-        setActiveLocationField(newInput);
-        newInput.focus();
-        enforceEndpointStopTypes();
-        updateWaitVisibility();
+        if (routeStops.length >= MAX_DESTINATIONS) return;
+        // 30-minute default matches this form's original convention (the
+        // ops Sandboxes default new stops to 15 minutes, but that's a
+        // different tool with different conventions - kept separate
+        // deliberately rather than copied over unasked).
+        routeStops.push({ name: "", lat: null, lon: null, isCustomLocation: false, stopType: "LAND", groundWaitMins: 30 });
+        renderRouteStops();
+        setActiveLocationField(routeStops.length - 1);
+        const el = getLocationInputElement(routeStops.length - 1);
+        if (el) el.focus();
     });
-}
-
-function removeLeg(id) {
-    const element = document.getElementById(id);
-    if (element) {
-        const input = element.querySelector('input[name="intermediateStop[]"]');
-        if (input) {
-            customLocationCoords.delete(input);
-            if (activeLocationInput === input) setActiveLocationField(null);
-        }
-        element.remove();
-    }
-
-    const currentLegs = document.querySelectorAll('.leg-row').length;
-    if (currentLegs === 0) {
-        const waitAtB = document.getElementById('waitAtBContainer');
-        if (waitAtB) waitAtB.style.display = 'none';
-    }
-    enforceEndpointStopTypes();
-    updateWaitVisibility();
-    scheduleRouteUpdate();
 }
 
 let routeUpdateTimeout;
@@ -359,44 +426,41 @@ function scheduleRouteUpdate() {
 }
 
 function bindRouteListeners() {
-    const locationA = document.getElementById('locationA');
-    const locationB = document.getElementById('locationB');
-    const stopTypeB = document.getElementById('stopTypeB');
+    const locationAInput = document.getElementById('locationA');
 
-    if (locationA) locationA.addEventListener('input', scheduleRouteUpdate);
-    if (locationB) locationB.addEventListener('input', scheduleRouteUpdate);
-    if (stopTypeB) stopTypeB.addEventListener('change', () => { updateWaitVisibility(); scheduleRouteUpdate(); });
-
-    document.addEventListener('input', (e) => {
-        if (e.target && e.target.name === 'intermediateStop[]') scheduleRouteUpdate();
-        if (e.target && (e.target.id === 'locationA' || e.target.id === 'locationB' || e.target.name === 'intermediateStop[]')) {
-            if (customLocationCoords.has(e.target)) customLocationCoords.delete(e.target);
-        }
-    });
-
-    document.addEventListener('focusin', (e) => {
-        if (e.target && (e.target.id === 'locationA' || e.target.id === 'locationB' || e.target.name === 'intermediateStop[]')) {
-            setActiveLocationField(e.target);
-        }
-    });
-
-    enforceEndpointStopTypes();
-    updateWaitVisibility();
+    if (locationAInput) {
+        locationAInput.addEventListener('input', () => {
+            locationAStop.name = locationAInput.value;
+            if (!locationAInput.value.startsWith("Custom location (")) {
+                locationAStop.lat = null;
+                locationAStop.lon = null;
+                locationAStop.isCustomLocation = false;
+            }
+            scheduleRouteUpdate();
+        });
+        locationAInput.addEventListener('focus', () => setActiveLocationField("A"));
+    }
 }
 
 /* ========================================
-   CLOCK GENERATOR (15-minute intervals)
+   CLOCK GENERATOR
+   0 and 5 minutes as two short entries, then clean 15-minute steps from
+   there up — matches the wait-time dropdown used in the ops Sandboxes.
    ======================================== */
 const generateClockOptions = (maxHours, defaultH = 0, defaultM = 30) => {
     let options = '';
-    for (let h = 0; h <= maxHours; h++) {
-        for (let m = 0; m < 60; m += 15) {
-            const hh = h.toString().padStart(2, '0');
-            const mm = m.toString().padStart(2, '0');
-            const isSelected = (h === defaultH && m === defaultM) ? 'selected' : '';
-            options += `<option value="${hh}:${mm}" ${isSelected}>${hh}:${mm}</option>`;
-        }
-    }
+    const totalMaxMins = maxHours * 60;
+    const minuteMarks = [0, 5];
+    for (let m = 15; m <= totalMaxMins; m += 15) minuteMarks.push(m);
+
+    minuteMarks.forEach(totalMins => {
+        const h = Math.floor(totalMins / 60);
+        const m = totalMins % 60;
+        const hh = h.toString().padStart(2, '0');
+        const mm = m.toString().padStart(2, '0');
+        const isSelected = (h === defaultH && m === defaultM) ? 'selected' : '';
+        options += `<option value="${hh}:${mm}" ${isSelected}>${hh}:${mm}</option>`;
+    });
     return options;
 };
 
@@ -451,12 +515,14 @@ if (quoteForm) {
     quoteForm.addEventListener('submit', (e) => {
         e.preventDefault();
 
-        const stops = Array.from(document.querySelectorAll('input[name="intermediateStop[]"]'))
-            .map(s => s.value.trim())
-            .filter(v => v);
+        const namedStops = routeStops.filter(s => s.name && s.name.trim() !== "");
 
-        if (stops.length > 5) {
-            alert("Maximum 5 intermediate stops allowed.");
+        if (!locationAStop.name.trim()) {
+            alert("Please enter Location A.");
+            return;
+        }
+        if (namedStops.length === 0) {
+            alert("Please add at least one destination (Location B).");
             return;
         }
 
@@ -467,19 +533,17 @@ if (quoteForm) {
             address: combineAddress() || "",
             email: document.getElementById('email')?.value || "",
             phone: document.getElementById('phone')?.value || "",
-            locationA: document.getElementById('locationA')?.value || "",
-            locationB: document.getElementById('locationB')?.value || "",
+            locationA: locationAStop.name,
             departureDate: document.getElementById('departureDate')?.value || "",
             departureTime: document.getElementById('departureTime')?.value || "",
             passengers: document.getElementById('passengers')?.value || "",
             accessNotes: document.getElementById('accessNotes')?.value || "",
-            intermediateStops: stops
+            stops: namedStops
         };
 
         summaryArea.innerHTML = `
             <p><strong>Name:</strong> ${pendingData.firstName} ${pendingData.surname}</p>
-            <p><strong>Route:</strong> ${pendingData.locationA} → ${pendingData.locationB}</p>
-            ${stops.length > 0 ? `<p><strong>Stops:</strong> ${stops.join(', ')}</p>` : ''}
+            <p><strong>Route:</strong> ${pendingData.locationA} → ${namedStops.map(s => s.name).join(' → ')}</p>
             <p><strong>Departure:</strong> ${pendingData.departureDate} at ${pendingData.departureTime}</p>
             <p><strong>Passengers:</strong> ${pendingData.passengers}</p>
             ${pendingData.accessNotes ? `<p><strong>Landing Site Notes:</strong> ${pendingData.accessNotes}</p>` : ''}
@@ -500,11 +564,11 @@ if (finalSubmitBtn) {
         const get = (id) => document.getElementById(id)?.value || "";
 
         try {
-            const locationA = get("locationA");
-            const locationB = get("locationB");
+            const locationA = locationAStop.name.trim();
+            const namedStops = routeStops.filter(s => s.name && s.name.trim() !== "");
 
-            if (!locationA || !locationB) {
-                alert("Please enter location A and location B");
+            if (!locationA || namedStops.length === 0) {
+                alert("Please enter location A and at least one destination.");
                 return;
             }
 
@@ -523,40 +587,17 @@ if (finalSubmitBtn) {
             formData.append("accessNotes", get("accessNotes"));
             formData.append("locationA", locationA);
 
-            const stops = (pendingData.intermediateStops || []).filter(v => v && v.trim() !== "");
-            const route = [locationA, locationB, ...stops];
-            const totalLocations = 1 + stops.length;
-
-            const locLetters = ['B', 'C', 'D', 'E', 'F', 'G'];
-            for (let i = 0; i < 6; i++) {
-                const label = `Location ${locLetters[i]}`;
-                formData.append(label, route[i + 1] || "");
-            }
-
-            if (totalLocations > 1) {
-                formData.append("waitTimeB", document.getElementById('waitTimeB')?.value || "");
-            } else {
-                formData.append("waitTimeB", "");
-            }
-
-            const waitLetters = ['C', 'D', 'E', 'F'];
-
-            formData.append("stopTypeB", document.getElementById('stopTypeB')?.value || "LAND");
-
-            const dynamicStopTypeSelects = document.querySelectorAll('select[name="stopType[]"]');
-            waitLetters.forEach((letter, index) => {
-                const sel = dynamicStopTypeSelects[index];
-                formData.append(`stopType${letter}`, sel ? sel.value : "");
-            });
-
-            const dynamicWaitSelects = document.querySelectorAll('select[name="waitTime[]"]');
-            waitLetters.forEach((letter, index) => {
-                if (totalLocations > (index + 2)) {
-                    formData.append(`waitTime${letter}`, dynamicWaitSelects[index]?.value || "");
-                } else {
-                    formData.append(`waitTime${letter}`, "");
-                }
-            });
+            // Single JSON payload for every destination, in order - replaces
+            // the old fixed Location B-G / waitTimeB-F / stopTypeB-F fields.
+            const routeJson = namedStops.map(s => ({
+                name: s.name,
+                lat: s.lat != null ? Number(s.lat) : null,
+                lon: s.lon != null ? Number(s.lon) : null,
+                isCustomLocation: !!s.isCustomLocation,
+                stopType: s.stopType || "LAND",
+                groundWaitMins: s.groundWaitMins || 0
+            }));
+            formData.append("routeJson", JSON.stringify(routeJson));
 
             const res = await fetch(APPS_SCRIPT_URL, {
                 method: "POST",
@@ -584,9 +625,7 @@ if (finalSubmitBtn) {
 window.onload = () => {
     loadAirstrips();
     bindRouteListeners();
-
-    const waitTimeB = document.getElementById('waitTimeB');
-    if (waitTimeB) waitTimeB.innerHTML = generateClockOptions(12, 0, 30);
+    renderRouteStops();
 
     const dateInput = document.getElementById('departureDate');
     if (dateInput) {
