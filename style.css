@@ -24,6 +24,8 @@ input, select {
     border: 1px solid #ddd; 
     border-radius: 6px; 
     box-sizing: border-box; /* Crucial for sizing! */
+    font-family: inherit;
+    font-size: 15px;
 }
 
 /* The intermediate stop rows */
@@ -43,7 +45,14 @@ button {
     border: none; 
     border-radius: 6px; 
     font-weight: bold; 
+    font-family: inherit;
+    font-size: 15px;
     cursor: pointer; 
+}
+
+textarea {
+    font-family: inherit;
+    font-size: 15px;
 }
 
 .active-location-target {
