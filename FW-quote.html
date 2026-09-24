@@ -71,12 +71,12 @@
         For each stop, tell us whether we should land there or just fly over it on the way through.
         </small>
 
+        <datalist id="fwAirstripOptions"></datalist>
+
         <!-- Location A -->
         <div class="route-stop">
             <span class="stop-label" style="font-weight: bold; font-size: 0.9rem; margin-top:0;">Location A</span>
-            <select id="locationA" required>
-                <option value="">Loading locations...</option>
-            </select>
+            <input type="text" id="locationA" list="fwAirstripOptions" placeholder="Start typing an airfield name or code..." required style="width: 100%; padding: 8px;">
         </div>
 
         <div id="routeStopsContainer" style="margin-top: 15px;"></div>
@@ -129,6 +129,6 @@
         </div>
     </div>
 </div>
-   <script src="FW-script.js"></script>
+   <script src="script.js"></script>
 </body>
 </html>
