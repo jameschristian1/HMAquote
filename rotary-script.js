@@ -328,15 +328,21 @@ function renderRouteStops() {
                     </select>
                 </div>
 
-                <div class="wait-time-group" style="flex: 1; min-width: 130px; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff; ${showWait ? '' : 'display:none;'}">
+                <div class="wait-time-group" style="flex: 1; min-width: 130px; background: #f0f7ff; padding: 8px; border-radius: 4px; border: 1px solid #d0e4ff; ${showWait ? 'display:block;' : 'display:none;'}">
                     <label style="font-weight: bold; font-size: 0.8rem; margin-top: 0;">Wait at ${label}:</label>
                     <select style="width: 100%; padding: 4px; margin-top: 4px;" onchange="updateStopWait(${i}, this.value)">
                         ${generateClockOptions(12, Math.floor(waitMins / 60), waitMins % 60)}
                     </select>
                 </div>
 
-                <button type="button" onclick="removeRouteStop(${i})"
-                    style="background: #dc3545; color: white; width: 40px; height: 38px; border: none; border-radius: 4px; cursor: pointer; margin-top: 0; padding: 0;">X</button>
+                <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                    <button type="button" onclick="shiftStopUp(${i})" ${i === 0 ? 'disabled' : ''}
+                        style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; width: 32px; height: 38px; border-radius: 4px; cursor: pointer; font-weight: bold; padding: 0; margin-top: 0;${i === 0 ? ' opacity: 0.3;' : ''}">▲</button>
+                    <button type="button" onclick="shiftStopDown(${i})" ${isLast ? 'disabled' : ''}
+                        style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; width: 32px; height: 38px; border-radius: 4px; cursor: pointer; font-weight: bold; padding: 0; margin-top: 0;${isLast ? ' opacity: 0.3;' : ''}">▼</button>
+                    <button type="button" onclick="removeRouteStop(${i})"
+                        style="background: #dc3545; color: white; width: 40px; height: 38px; border: none; border-radius: 4px; cursor: pointer; margin-top: 0; padding: 0;">X</button>
+                </div>
             </div>
           </div>`;
     }).join('');
@@ -377,6 +383,26 @@ function updateStopWait(index, hhmm) {
     if (!routeStops[index]) return;
     const parts = hhmm.split(':');
     routeStops[index].groundWaitMins = (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+}
+
+function shiftStopUp(index) {
+    if (index === 0) return;
+    [routeStops[index - 1], routeStops[index]] = [routeStops[index], routeStops[index - 1]];
+    // A numeric activeFieldKey means "map clicks target this destination by
+    // position" - after a swap that position now holds a different stop,
+    // so clear it rather than have a map click silently land on the wrong
+    // one. The user just needs to click back into a field to resume.
+    if (typeof activeFieldKey === "number") setActiveLocationField(null);
+    renderRouteStops();
+    scheduleRouteUpdate();
+}
+
+function shiftStopDown(index) {
+    if (index === routeStops.length - 1) return;
+    [routeStops[index + 1], routeStops[index]] = [routeStops[index], routeStops[index + 1]];
+    if (typeof activeFieldKey === "number") setActiveLocationField(null);
+    renderRouteStops();
+    scheduleRouteUpdate();
 }
 
 function removeRouteStop(index) {
