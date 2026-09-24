@@ -27,17 +27,18 @@ function initMap() {
 
 window.addEventListener('load', initMap);
 
-function getSelectedLatLng(selectId) {
-    const el = document.getElementById(selectId);
-    if (!el || !el.selectedOptions[0]) return null;
-
-    const opt = el.selectedOptions[0];
-    const lat = parseFloat(opt.dataset.lat);
-    const lon = parseFloat(opt.dataset.lon);
-
+function resolveAirstripCoords(name) {
+    if (!name) return null;
+    const match = airstripOptionsCache.find(o => o.text === name.toString().trim());
+    if (!match) return null;
+    const lat = parseFloat(match.lat);
+    const lon = parseFloat(match.lon);
     if (isNaN(lat) || isNaN(lon)) return null;
-
     return [lat, lon];
+}
+
+function isResolvedAirstrip(name) {
+    return !!airstripOptionsCache.find(o => o.text === (name || "").toString().trim());
 }
 
 function updateRouteMap() {
@@ -46,7 +47,7 @@ function updateRouteMap() {
     const points = [];
     const stopTypes = [];
 
-    const locationA = getSelectedLatLng('locationA');
+    const locationA = resolveAirstripCoords(document.getElementById('locationA')?.value || "");
     if (locationA) { points.push(locationA); stopTypes.push('LAND'); }
 
     routeStops.forEach(stop => {
@@ -109,26 +110,26 @@ async function loadAirstrips() {
             lon: cols[5]
         }));
 
-        populateDropdown(document.getElementById('locationA'));
-        renderRouteStops(); // populates any destination selects already on screen
+        populateAirstripDatalist();
+        renderRouteStops(); // re-renders any destination rows already on screen
     } catch (error) {
         console.error('Error loading airstrips:', error);
     }
 }
 
-function populateDropdown(selectElement) {
-    if (!selectElement) return;
+function populateAirstripDatalist() {
+    const datalist = document.getElementById('fwAirstripOptions');
+    if (!datalist) return;
 
-    selectElement.innerHTML = '<option value="">Select Location</option>';
+    datalist.innerHTML = '';
 
-    const sorted = [...airstripOptionsCache].sort((a, b) => a.text.localeCompare(b.text));
-
-    sorted.forEach(optData => {
-        const opt = new Option(optData.text, optData.text);
-        opt.dataset.lat = optData.lat;
-        opt.dataset.lon = optData.lon;
-        selectElement.add(opt);
-    });
+    [...airstripOptionsCache]
+        .sort((a, b) => a.text.localeCompare(b.text))
+        .forEach(optData => {
+            const opt = document.createElement('option');
+            opt.value = optData.text;
+            datalist.appendChild(opt);
+        });
 }
 
 // Renders every destination row from routeStops. Fully re-creates the DOM
@@ -156,13 +157,16 @@ function renderRouteStops() {
         const isWaypoint = stop.stopType === "WAYPOINT";
         const showWait = !isLast && !isWaypoint;
         const waitMins = stop.groundWaitMins || 0;
+        const safeName = (stop.name || "").replace(/"/g, '&quot;');
 
         return `
           <div class="leg-row" data-index="${i}" style="margin-top: 15px;">
             <div style="display: flex; align-items: flex-end; gap: 10px;">
                 <div style="flex: 2;">
                     <label style="font-weight: bold; font-size: 0.9rem; margin-top: 0;">Location ${label}</label>
-                    <select data-role="location-select" required style="width: 100%; padding: 8px;" onchange="updateStopLocation(${i}, this)"></select>
+                    <input type="text" data-role="location-input" list="fwAirstripOptions" value="${safeName}"
+                        placeholder="Start typing an airfield name or code..." required style="width: 100%; padding: 8px;"
+                        oninput="updateStopName(${i}, this.value)">
                 </div>
 
                 <div style="flex: 0.9; min-width: 110px;">
@@ -186,21 +190,18 @@ function renderRouteStops() {
           </div>`;
     }).join('');
 
-    // Populate + restore each destination's location select after rebuild.
-    container.querySelectorAll('[data-role="location-select"]').forEach((sel, i) => {
-        populateDropdown(sel);
-        sel.value = routeStops[i].name || "";
-    });
-
     updateAddButtonState();
 }
 
-function updateStopLocation(index, selectEl) {
+// Typing only updates the data + schedules a map refresh - it deliberately
+// never calls renderRouteStops(), which would replace this very input's
+// DOM node mid-keystroke and lose focus/cursor position.
+function updateStopName(index, value) {
     if (!routeStops[index]) return;
-    const opt = selectEl.selectedOptions[0];
-    routeStops[index].name = selectEl.value;
-    routeStops[index].lat = opt ? opt.dataset.lat : null;
-    routeStops[index].lon = opt ? opt.dataset.lon : null;
+    routeStops[index].name = value;
+    const match = airstripOptionsCache.find(o => o.text === value.toString().trim());
+    routeStops[index].lat = match ? match.lat : null;
+    routeStops[index].lon = match ? match.lon : null;
     scheduleRouteUpdate();
 }
 
@@ -258,7 +259,7 @@ function scheduleRouteUpdate() {
 
 function bindRouteListeners() {
     const locationA = document.getElementById('locationA');
-    if (locationA) locationA.addEventListener('change', scheduleRouteUpdate);
+    if (locationA) locationA.addEventListener('input', scheduleRouteUpdate);
 }
 
 /* ========================================
@@ -337,8 +338,13 @@ if (quoteForm) {
         const locationA = document.getElementById('locationA')?.value || "";
         const namedStops = routeStops.filter(s => s.name && s.name.trim() !== "");
 
-        if (!locationA) {
-            alert("Please select Location A.");
+        if (!locationA || !isResolvedAirstrip(locationA)) {
+            alert("Please select Location A from the suggested list of airfields.");
+            return;
+        }
+        const unresolvedStop = namedStops.find(s => !isResolvedAirstrip(s.name));
+        if (unresolvedStop) {
+            alert(`"${unresolvedStop.name}" isn't a recognised airfield. Please pick from the suggested list as you type.`);
             return;
         }
         if (namedStops.length === 0) {
@@ -384,7 +390,16 @@ if (finalSubmitBtn) {
             const locationA = get("locationA");
             const namedStops = routeStops.filter(s => s.name && s.name.trim() !== "");
 
-            if (!locationA || namedStops.length === 0) {
+            if (!locationA || !isResolvedAirstrip(locationA)) {
+                alert("Please select Location A from the suggested list of airfields.");
+                return;
+            }
+            const unresolvedStop = namedStops.find(s => !isResolvedAirstrip(s.name));
+            if (unresolvedStop) {
+                alert(`"${unresolvedStop.name}" isn't a recognised airfield. Please pick from the suggested list as you type.`);
+                return;
+            }
+            if (namedStops.length === 0) {
                 alert("Please select location A and at least one destination.");
                 return;
             }
